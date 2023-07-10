@@ -291,9 +291,7 @@ class tensor:
         data = np.reshape(x.data, (m, n, n), order="F")
 
         # Add diagonal entries for each slice
-        newdata = np.zeros((m, 1))
-        for idx in range(0, n):
-            newdata += data[:, idx, idx][:, None]
+        newdata = np.sum(data[:, range(0, n), range(0, n)], axis=1)[:, None]
 
         # Reshape result
         if np.prod(newsize) > 1:

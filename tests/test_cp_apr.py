@@ -37,6 +37,13 @@ def test_loglikelihood():
     assert np.isclose(
         explicitAnswer, ttb.tt_loglikelihood(tensorInstance, ktensorInstance)
     )
+    # Verify iterative approach
+    assert np.isclose(
+        explicitAnswer, ttb.tt_loglikelihood(sptensorInstance, ktensorInstance, False)
+    )
+    assert np.isclose(
+        explicitAnswer, ttb.tt_loglikelihood(tensorInstance, ktensorInstance, False)
+    )
 
     # Test case for randomly selected model and data
     np.random.seed(123)
@@ -225,17 +232,17 @@ def test_cpapr_pqnr(capsys):
     np.random.seed(123)
     M, _, _ = ttb.cp_apr(tensorInstance, 2, algorithm="pqnr", printinneritn=1)
     capsys.readouterr()
-    assert np.isclose(M.full().data, ktensorInstance.full().data, rtol=1e-01).all()
+    assert np.allclose(M.full().data, ktensorInstance.full().data, rtol=1e-01)
 
     # Try solve with sptensor
     sptensorInstance = ttb.sptensor.from_tensor_type(tensorInstance)
     np.random.seed(123)
     M, _, _ = ttb.cp_apr(sptensorInstance, 2, algorithm="pqnr")
     capsys.readouterr()
-    assert np.isclose(M.full().data, ktensorInstance.full().data, rtol=1e-01).all()
-    M, _, _ = ttb.cp_apr(sptensorInstance, 2, algorithm="pqnr", precompinds=False)
+    assert np.allclose(M.full().data, ktensorInstance.full().data, rtol=1e-01)
+    M, _, _ = ttb.cp_apr(sptensorInstance, 2, algorithm="pqnr", precompinds=False, printitn=0)
     capsys.readouterr()
-    assert np.isclose(M.full().data, ktensorInstance.full().data, rtol=1e-01).all()
+    assert np.allclose(M.full().data, ktensorInstance.full().data, rtol=1e-01)
 
     # Edge cases
     # Confirm timeout works
@@ -374,6 +381,7 @@ def test_getHessian():
     phi, ups = ttb.calc_partials(False, Pi, 1e-12, x_row, m_row)
     free_indices = [0, 1]
     Hessian = ttb.get_hessian(ups, Pi, free_indices)
+    Hessian_old = ttb.get_hessian(ups, Pi, free_indices, False)
 
     #
     num_free = len(free_indices)
@@ -388,6 +396,7 @@ def test_getHessian():
             H[(i, j), (j, i)] = val
 
     assert np.allclose(H, Hessian)
+    assert np.allclose(H, Hessian_old)
 
 
 def test_getSearchDirPdnr():

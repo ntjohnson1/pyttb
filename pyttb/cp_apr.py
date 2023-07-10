@@ -1489,7 +1489,7 @@ def tt_linesearch_prowsubprob(
 
 
 def get_hessian(
-    upsilon: np.ndarray, Pi: np.ndarray, free_indices: np.ndarray
+    upsilon: np.ndarray, Pi: np.ndarray, free_indices: np.ndarray, direct: bool = True
 ) -> np.ndarray:
     """
     Return the Hessian for one PDNR row subproblem of Model[n], for just the rows and
@@ -1501,6 +1501,8 @@ def get_hessian(
         intermediate quantity (upsilon) used for second derivatives
     Pi:
     free_indices:
+    direct:
+        Whether to do the direct rather than iterative assembly.
 
     Returns
     -------
@@ -1508,15 +1510,17 @@ def get_hessian(
         Sub-block of full Hessian identified by free-indices
 
     """
-
-    num_free = len(free_indices)
-    H = np.zeros((num_free, num_free))
-    for i in range(num_free):
-        for j in range(num_free):
-            c = free_indices[i]
-            d = free_indices[j]
-            val = np.sum(upsilon.transpose() * Pi[:, c] * Pi[:, d])
-            H[(i, j), (j, i)] = val
+    if direct:
+        H = (upsilon * Pi[:, free_indices].transpose()).dot(Pi[:, free_indices])
+    else:
+        num_free = len(free_indices)
+        H = np.zeros((num_free, num_free))
+        for i in range(num_free):
+            for j in range(num_free):
+                c = free_indices[i]
+                d = free_indices[j]
+                val = np.sum(upsilon.transpose() * Pi[:, c] * Pi[:, d])
+                H[(i, j), (j, i)] = val
     return H
 
 
@@ -1564,7 +1568,7 @@ def tt_loglikelihood_row(
     """
     term1 = -np.sum(model_row)
     if isSparse:
-        term2 = np.sum(data_row.transpose() * np.log(model_row.dot(Pi.transpose())))
+        term2 = np.dot(data_row.squeeze(), np.log(model_row.dot(Pi.transpose())))
     else:
         b_pi = model_row.dot(Pi.transpose())
         skip_zeros = data_row != 0
@@ -1799,7 +1803,7 @@ def calculate_phi(
 
 
 def tt_loglikelihood(
-    Data: Union[ttb.tensor, ttb.sptensor], Model: ttb.ktensor
+    Data: Union[ttb.tensor, ttb.sptensor], Model: ttb.ktensor, direct: bool = True
 ) -> float:
     """
     Compute log-likelihood of data with model.
@@ -1808,6 +1812,8 @@ def tt_loglikelihood(
     ----------
     Data:
     Model:
+    direct:
+        Whether to do direct calculation instead of iterative.
 
     Returns
     -------
@@ -1837,12 +1843,16 @@ def tt_loglikelihood(
     dX = ttb.tt_to_dense_matrix(Data, 1)
     dM = ttb.tt_to_dense_matrix(Model, 1)
     f = 0
-    for i in range(dX.shape[0]):
-        for j in range(dX.shape[1]):
-            if dX[i, j] == 0:
-                pass
-            else:
-                f += dX[i, j] * np.log(dM[i, j])
+    if direct:
+        non_zeros = dX != 0
+        f = dX[non_zeros].dot(np.log(dM[non_zeros]))
+    else:
+        for i in range(dX.shape[0]):
+            for j in range(dX.shape[1]):
+                if dX[i, j] == 0:
+                    pass
+                else:
+                    f += dX[i, j] * np.log(dM[i, j])
 
     f -= np.sum(Model.factor_matrices[0])
     return float(f)
