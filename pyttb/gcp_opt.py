@@ -41,7 +41,7 @@ def gcp_opt(  # noqa:  PLR0912,PLR0913
         Objective function to minimize for the CP decomposition. Either a pre-defined
         objective or a tuple of function_handle, gradient_handle, and lower_bound.
     optimizer:
-        Optimizer class for solving the decompistion problem defined.
+        Optimizer class for solving the decomposition problem defined.
     init:
         Initial solution to the problem.
     mask:
