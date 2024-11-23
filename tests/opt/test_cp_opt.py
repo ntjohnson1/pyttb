@@ -7,7 +7,9 @@ from __future__ import annotations
 import numpy as np
 
 import pyttb as ttb
-from pyttb.cp_opt import _get_initial_guess
+from pyttb.cp_opt import _get_initial_guess, cp_opt
+from pyttb.opt.fg_setup import FGHandles
+from pyttb.opt.optimizers import LBFGSB
 
 
 def test_initial_guesses():
@@ -29,3 +31,28 @@ def test_initial_guesses():
 
     M1 = _get_initial_guess(data, rank, M0.factor_matrices)
     assert M1.isequal(M0)
+
+
+def test_fg_setup_smoke():
+    rank = 2
+    data = ttb.tenones((2, 2, 2))
+
+    M0 = _get_initial_guess(data, rank, "random")
+    scale = M0.full().norm() ** 2
+    fgh = FGHandles(scale, scale)
+    f = fgh.function_handle(M0, M0.full())
+    g = fgh.gradient_handle(M0, M0.full())
+    assert np.abs(f) < 5 * np.finfo(f.dtype).eps
+    assert (np.abs(g_i) < 5 * np.finfo(g_i.dtype).eps for g_i in g)
+
+
+def test_cp_opt_smoke():
+    rank = 2
+    data = ttb.tenones((2, 2, 2))
+    optimizer = LBFGSB()
+
+    M0 = _get_initial_guess(data, rank, "random")
+    model, _, info = cp_opt(M0.full(), rank, optimizer, M0)
+    assert np.linalg.norm(M0.full().data - model.full().data) < (
+        5 * np.finfo(model.full().data.dtype).eps
+    )

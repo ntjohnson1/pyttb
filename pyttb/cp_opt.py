@@ -6,19 +6,19 @@
 
 import logging
 import time
-from functools import partial
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
 import pyttb as ttb
-from pyttb.gcp.optimizers import LBFGSB, StochasticSolver
+from pyttb.opt.fg_setup import setup
+from pyttb.opt.optimizers import LBFGSB
 
 
-def cp_opt(
+def cp_opt(  # noqa:  PLR0913
     data: Union[ttb.tensor, ttb.sptensor],
     rank: int,
-    optimizer: Union[StochasticSolver, LBFGSB],
+    optimizer: Union[LBFGSB],
     init: Union[
         Literal["random"],
         Literal["random_normal"],
@@ -60,14 +60,12 @@ def cp_opt(
     """
     start = time.monotonic()
     # Skip to line 93 in cp_opt.m
-    shape = data.shape
-    ndims = data.ndims
     M0 = _get_initial_guess(data, rank, init)
     if M0.ncomponents != rank:
         raise ValueError(f"Initial guess has {M0.ncomponents} but expected {rank}")
 
     if Xnormsqr is None:
-        Xnormsqr = data.norm()**2
+        Xnormsqr = data.norm() ** 2
 
     if scale is None:
         scale = 1
@@ -75,12 +73,22 @@ def cp_opt(
             scale = Xnormsqr
 
     setup_time = time.monotonic() - start
+    if False:
+        print(setup_time)
 
     # Optimization stage
     start = time.monotonic()
     if printitn > 0:
         logging.info("\nCP-OPT Direct Optimization")
-    function_handle, gradient_handle = setup()
+    function_handle, gradient_handle, lower_bound = setup(scale, Xnormsqr)
+    result, info = optimizer.solve(
+        M0,
+        data,
+        function_handle,
+        gradient_handle,
+        lower_bound,
+    )
+    return result, M0, info
 
 
 def _get_initial_guess(
@@ -116,9 +124,14 @@ def _get_initial_guess(
         return ttb.ktensor(U0, copy=False)
     if init == "random":
         # TODO tie into shared generator/seed
-        rand = partial(np.random.uniform, 0, 1)
+        def rand(shape: Tuple[int, ...]) -> np.ndarray:
+            return np.random.uniform(0, 1, size=shape)
+
         return ttb.ktensor.from_function(rand, data.shape, rank)
     if init == "random_normal":
-        randn = partial(np.random.normal, 0, 1)
+
+        def randn(shape: Tuple[int, ...]) -> np.ndarray:
+            return np.random.normal(0, 1, size=shape)
+
         return ttb.ktensor.from_function(randn, data.shape, rank)
     raise ValueError(f"Unsupported initialization type {init}")

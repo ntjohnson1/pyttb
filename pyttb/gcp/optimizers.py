@@ -405,11 +405,10 @@ class Adagrad(StochasticSolver):
 
 
 # If we use more scipy optimizers in the future we should generalize this
-class LBFGSB:
-    """Simple wrapper around scipy lbfgsb
+class LBFGSB_Base:
+    """Base functionality of LBFGSB Solver
 
-    NOTE: If used for publications please see scipy documentation for adding citation
-    for the implementation.
+    Doesn't enforce the solve method since it can have different signatures downstream
     """
 
     def __init__(  # noqa: PLR0913
@@ -466,35 +465,19 @@ class LBFGSB:
             if value is not None
         }
 
-    def solve(  # noqa: PLR0913
+    def _run_solver(
         self,
-        initial_model: ttb.ktensor,
-        data: ttb.tensor,
-        function_handle: function_type,
-        gradient_handle: function_type,
-        lower_bound: float = -np.inf,
-        mask: Optional[np.ndarray] = None,
+        x0: np.ndarray,
+        model: ttb.ktensor,
+        lbfgsb_func_grad: Callable[[np.ndarray], Tuple[float, np.ndarray]],
+        lower_bound: float,
+        shape: Tuple[int, ...],
     ) -> Tuple[ttb.ktensor, Dict]:
-        """Solves the defined optimization problem"""
-        model = initial_model.copy()
-
-        def lbfgsb_func_grad(vector: np.ndarray):
-            model.update(np.arange(initial_model.ndims), vector)
-            func_val, grads = evaluate(
-                model,
-                data,
-                mask,
-                function_handle,
-                gradient_handle,
-            )
-            return func_val, ttb.ktensor(grads, copy=False).tovec(False)
-
-        x0 = model.tovec(False)
         if "pgtol" not in self._solver_kwargs:
-            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(data.shape)
+            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(shape)
 
         # Set callback function that returns time trace by default
-        monitor = LBFGSB.Monitor(
+        monitor = Monitor(
             self._solver_kwargs["maxiter"],
             self._solver_kwargs.get("callback", None),  # callback may be pruned in ctor
         )
@@ -508,40 +491,96 @@ class LBFGSB:
             bounds=[(lower_bound, np.inf)] * len(x0),
             **self._non_empty_kwargs(),
         )
-        model.update(np.arange(initial_model.ndims), final_vector)
+        model.update(np.arange(model.ndims), final_vector)
 
         lbfgsb_info["final_f"] = final_f
         lbfgsb_info["callback"] = vars(monitor)
         # Unregister monitor in case of re-use
         self._solver_kwargs["callback"] = monitor.callback
+        return model, lbfgsb_info
+
+
+class LBFGSB(LBFGSB_Base):
+    """Simple wrapper around scipy lbfgsb
+
+    NOTE: If used for publications please see scipy documentation for adding citation
+    for the implementation.
+    """
+
+    def _get_lbfgsb_func_grad(
+        self,
+        model: ttb.ktensor,
+        data: ttb.tensor,
+        function_handle: function_type,
+        gradient_handle: function_type,
+        mask: Optional[np.ndarray],
+    ) -> Callable[[np.ndarray], Tuple[float, np.ndarray]]:
+        def lbfgsb_func_grad(vector: np.ndarray) -> Tuple[float, np.ndarray]:
+            model.update(np.arange(model.ndims), vector)
+            func_val, grads = evaluate(
+                model,
+                data,
+                mask,
+                function_handle,
+                gradient_handle,
+            )
+            return func_val, ttb.ktensor(grads, copy=False).tovec(False)
+
+        return lbfgsb_func_grad
+
+    def solve(  # noqa: PLR0913
+        self,
+        initial_model: ttb.ktensor,
+        data: ttb.tensor,
+        function_handle: function_type,
+        gradient_handle: function_type,
+        lower_bound: float = -np.inf,
+        mask: Optional[np.ndarray] = None,
+    ) -> Tuple[ttb.ktensor, Dict]:
+        """Solves the defined optimization problem"""
+        model = initial_model.copy()
+
+        lbfgsb_func_grad = self._get_lbfgsb_func_grad(
+            model,
+            data,
+            function_handle,
+            gradient_handle,
+            mask,
+        )
+
+        x0 = model.tovec(False)
+        model, lbfgsb_info = self._run_solver(
+            x0, model, lbfgsb_func_grad, lower_bound, data.shape
+        )
 
         # TODO big print output
         return model, lbfgsb_info
 
-    class Monitor(dict):
-        def __init__(
-            self,
-            maxiter: int,
-            callback: Optional[Callable[[np.ndarray], None]] = None,  # type: ignore
-        ):
-            self.startTime = time.perf_counter()
-            self.time_trace = np.zeros((maxiter,))
-            self.iter = 0
-            self._callback = callback
 
-        def __call__(self, xk: np.ndarray) -> None:
-            if self._callback is not None:
-                self._callback(xk)
-            self.time_trace[self.iter] = time.perf_counter() - self.startTime
-            self.iter += 1
+class Monitor(dict):
+    def __init__(
+        self,
+        maxiter: int,
+        callback: Optional[Callable[[np.ndarray], None]] = None,  # type: ignore
+    ):
+        self.startTime = time.perf_counter()
+        self.time_trace = np.zeros((maxiter,))
+        self.iter = 0
+        self._callback = callback
 
-        @property
-        def callback(self):
-            return self._callback
+    def __call__(self, xk: np.ndarray) -> None:
+        if self._callback is not None:
+            self._callback(xk)
+        self.time_trace[self.iter] = time.perf_counter() - self.startTime
+        self.iter += 1
 
-        @property
-        def __dict__(self):
-            if not self._callback:
-                return {"time_trace": self.time_trace}
-            else:
-                return {"time_trace": self.time_trace, "callback": self._callback}
+    @property
+    def callback(self):
+        return self._callback
+
+    @property
+    def __dict__(self):
+        if not self._callback:
+            return {"time_trace": self.time_trace}
+        else:
+            return {"time_trace": self.time_trace, "callback": self._callback}
