@@ -1,6 +1,6 @@
-"""Non-negative CP decomposition with alternating Poisson regression"""
+"""Non-negative CP decomposition with alternating Poisson regression."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -104,7 +104,7 @@ def cp_apr(  # noqa: PLR0913
         assert init.ndims == N, "Initial guess does not have the right number of modes"
         assert (
             init.ncomponents == rank
-        ), "Initial guess does not have the right number of componenets"
+        ), "Initial guess does not have the right number of components"
         for n in range(N):
             if init.shape[n] != input_tensor.shape[n]:
                 assert False, f"Mode {n} of the initial guess is the wrong size"
@@ -230,9 +230,6 @@ def tt_cp_apr_mu(  # noqa: PLR0912,PLR0913,PLR0915
     kappatol:
         MU ALGORITHM PARAMETER: Tolerance on complementary slackness
 
-    Returns
-    -------
-
     Notes
     -----
     REFERENCE: E. C. Chi and T. G. Kolda. On Tensors, Sparsity, and
@@ -259,7 +256,7 @@ def tt_cp_apr_mu(  # noqa: PLR0912,PLR0913,PLR0915
     M.normalize(normtype=1)
     Phi = []  # np.zeros((N,))#cell(N,1)
     for n in range(N):
-        # TODO prepopulation Phi instead of appen should be faster
+        # TODO prepopulation Phi instead of append should be faster
         Phi.append(np.zeros(M.factor_matrices[n].shape))
     kktModeViolations = np.zeros((N,))
 
@@ -316,7 +313,7 @@ def tt_cp_apr_mu(  # noqa: PLR0912,PLR0913,PLR0915
                 M.factor_matrices[n] *= Phi[n]
 
                 # Print status
-                if printinneritn != 0 and divmod(i, printinneritn)[1] == 0:
+                if (printinneritn > 0) and (divmod(i, printinneritn)[1] == 0):
                     print(
                         "\t\tMode = {n}, Inner Iter = {i}, "
                         f"KKT violation = {kktModeViolations[n]}"
@@ -326,7 +323,7 @@ def tt_cp_apr_mu(  # noqa: PLR0912,PLR0913,PLR0915
             M.normalize(normtype=1, mode=n)
 
         kktViolations[iteration] = np.max(kktModeViolations)
-        if divmod(iteration, printitn)[1] == 0:
+        if (printitn > 0) and (divmod(iteration, printitn)[1] == 0):
             print(
                 f"\tIter {iteration}: Inner Its = {nInnerIters[iteration]} "
                 f"KKT violation = {kktViolations[iteration]}, "
@@ -405,9 +402,9 @@ def tt_cp_apr_pdnr(  # noqa: PLR0912,PLR0913,PLR0915
     precompinds: bool,
     inexact: bool,
 ) -> Tuple[ttb.ktensor, Dict]:
-    """
-    Compute nonnegative CP with alternating Poisson regression
-    computes an estimate of the best rank-R
+    """Compute nonnegative CP with alternating Poisson regression.
+
+    Computes an estimate of the best rank-R
     CP model of a tensor X using an alternating Poisson regression.
     The algorithm solves "row subproblems" in each alternating subproblem,
     using a Hessian of size R^2.
@@ -491,7 +488,7 @@ def tt_cp_apr_pdnr(  # noqa: PLR0912,PLR0913,PLR0915
 
     if isinstance(input_tensor, ttb.sptensor) and isSparse and precompinds:
         # Precompute sparse index sets for all the row subproblems.
-        # Takes more memory but can cut exectuion time significantly in some cases.
+        # Takes more memory but can cut execution time significantly in some cases.
         if printitn > 0:
             print("\tPrecomuting sparse index sets...")
         sparseIx = []
@@ -524,7 +521,9 @@ def tt_cp_apr_pdnr(  # noqa: PLR0912,PLR0913,PLR0915
             if isinstance(input_tensor, ttb.tensor) and isSparse is False:
                 # Data is not a sparse tensor.
                 Pi = tt_calcpi_prowsubprob(input_tensor, M, rank, n, N, isSparse)
-                X_mat = input_tensor.to_tenmat(np.array([n]), copy=False).data
+                X_mat = input_tensor.to_tenmat(
+                    np.array([n], order=input_tensor.order), copy=False
+                ).data
 
             num_rows = M.factor_matrices[n].shape[0]
             isRowNOTconverged = np.zeros((num_rows,))
@@ -589,7 +588,7 @@ def tt_cp_apr_pdnr(  # noqa: PLR0912,PLR0913,PLR0915
                     if i == 0 and kkt_violation > kktModeViolations[n]:
                         kktModeViolations[n] = kkt_violation
 
-                    if printinneritn > 0 and np.mod(i, printinneritn) == 0:
+                    if (printinneritn > 0) and (divmod(i, printinneritn) == 0):
                         print(
                             f"\tMode = {n}, Row = {jj}, InnerIt = {i}",
                             end="",
@@ -676,7 +675,7 @@ def tt_cp_apr_pdnr(  # noqa: PLR0912,PLR0913,PLR0915
             rowsubprobStopTol = np.maximum(stoptol, kktViolations[iteration]) / 100.0
 
             # Print outer iteration status.
-            if printitn > 0 and np.mod(iteration, printitn) == 0:
+            if (printitn > 0) and (divmod(iteration, printitn)[1] == 0):
                 fnVals[iteration] = -tt_loglikelihood(input_tensor, M)
                 print(
                     f"{iteration}. Ttl Inner Its: {nInnerIters[iteration]}, "
@@ -850,7 +849,7 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
 
     if isinstance(input_tensor, ttb.sptensor) and precompinds:
         # Precompute sparse index sets for all the row subproblems.
-        # Takes more memory but can cut exectuion time significantly in some cases.
+        # Takes more memory but can cut execution time significantly in some cases.
         if printitn > 0:
             print("\tPrecomuting sparse index sets...")
         sparseIx = []
@@ -879,7 +878,9 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
             if not isinstance(input_tensor, ttb.sptensor) and not isSparse:
                 # Data is not a sparse tensor.
                 Pi = tt_calcpi_prowsubprob(input_tensor, M, rank, n, N, isSparse)
-                X_mat = input_tensor.to_tenmat(np.array([n]), copy=False).data
+                X_mat = input_tensor.to_tenmat(
+                    np.array([n], order=input_tensor.order), copy=False
+                ).data
 
             num_rows = M.factor_matrices[n].shape[0]
             isRowNOTconverged = np.zeros((num_rows,))
@@ -917,8 +918,8 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
                 delg = np.zeros((rank, lbfgsMem))
                 rho = np.zeros((lbfgsMem,))
                 lbfgsPos = 0
-                m_rowOLD = np.empty(())
-                gradOLD = np.empty(())
+                m_rowOLD = np.empty((), dtype=m_row.dtype)
+                gradOLD = np.empty((), dtype=m_row.dtype)
 
                 # Iteratively solve the row subproblem with projected quasi-Newton steps
                 for i in range(maxinneriters):
@@ -965,7 +966,7 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
                     if i == 0 and kkt_violation > kktModeViolations[n]:
                         kktModeViolations[n] = kkt_violation
 
-                    if printinneritn > 0 and np.mod(i, printinneritn) == 0:
+                    if (printinneritn > 0) and (divmod(i, printinneritn) == 0):
                         print(
                             f"\tMode = {n}, Row = {jj}, InnerIt = {i}",
                             end="",
@@ -983,8 +984,8 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
                     isRowNOTconverged[jj] = 1
 
                     # Update the L-BFGS approximation.
-                    tmp_delm = m_row - m_rowOLD
-                    tmp_delg = gradM - gradOLD
+                    tmp_delm: np.ndarray = m_row - m_rowOLD
+                    tmp_delg: np.ndarray = gradM - gradOLD
                     tmp_delm_dot = tmp_delm.dot(tmp_delg.transpose())
                     if not np.any(tmp_delm_dot == 0):
                         tmp_rho = 1 / tmp_delm_dot
@@ -992,12 +993,12 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
                         delg[:, lbfgsPos] = tmp_delg
                         rho[lbfgsPos] = tmp_rho
                     else:
-                        # Rho is required to be postive; if not, then skip the L-BFGS
+                        # Rho is required to be positive; if not, then skip the L-BFGS
                         # update pair. The recommended safeguard for full BFGS is
                         # Powell damping, but not clear how to damp in 2-loop L-BFGS
                         if dispLineWarn:
                             warnings.warn(
-                                "WARNING: skipping L-BFGS update, rho whould be "
+                                "WARNING: skipping L-BFGS update, rho would be "
                                 f"1 / {tmp_delm * tmp_delg}"
                             )
                         # Roll back lbfgsPos since it will increment later.
@@ -1072,7 +1073,7 @@ def tt_cp_apr_pqnr(  # noqa: PLR0912,PLR0913,PLR0915
         kktViolations[iteration] = np.max(kktModeViolations)
 
         # Print outer iteration status.
-        if printitn > 0 and np.mod(iteration, printitn) == 0:
+        if (printitn > 0) and (divmod(iteration, printitn)[1] == 0):
             fnVals[iteration] = -tt_loglikelihood(input_tensor, M)
             print(
                 f"{iteration}. Ttl Inner Its: {nInnerIters[iteration]}, KKT viol = "
@@ -1272,9 +1273,7 @@ def get_search_dir_pdnr(  # noqa: PLR0913
     mu: float,
     epsActSet: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute the search direction for PDNR using a two-metric projection with
-    damped Hessian
+    """Compute the search direction using a two-metric projection with damped Hessian.
 
     Parameters
     ----------
@@ -1372,8 +1371,7 @@ def tt_linesearch_prowsubprob(  # noqa: PLR0913
     phi_row: np.ndarray,
     display_warning: bool,
 ) -> Tuple[np.ndarray, float, float, float, int]:
-    """
-    Perform a line search on a row subproblem
+    """Perform a line search on a row subproblem.
 
     Parameters
     ----------
@@ -1390,7 +1388,7 @@ def tt_linesearch_prowsubprob(  # noqa: PLR0913
     max_steps:
         maximum number of steps to try (suggest 10)
     suff_decr:
-        sufficent decrease for convergence (suggest 1.0e-4)
+        sufficient decrease for convergence (suggest 1.0e-4)
     isSparse:
         sparsity flag for computing the objective
     data_row:
@@ -1420,7 +1418,7 @@ def tt_linesearch_prowsubprob(  # noqa: PLR0913
 
     stepSize = step_len
 
-    # Evalute the current objective value
+    # Evaluate the current objective value
     f_old = -tt_loglikelihood_row(isSparse, data_row, model_old, Pi)
     num_evals = 1
     count = 1
@@ -1488,9 +1486,9 @@ def tt_linesearch_prowsubprob(  # noqa: PLR0913
 def get_hessian(
     upsilon: np.ndarray, Pi: np.ndarray, free_indices: np.ndarray
 ) -> np.ndarray:
-    """
-    Return the Hessian for one PDNR row subproblem of Model[n], for just the rows and
-    columns corresponding to the free variables
+    """Return the Hessian for one PDNR row subproblem of Model[n].
+
+    Only for just the rows and columns corresponding to the free variables.
 
     Parameters
     ----------
@@ -1505,7 +1503,6 @@ def get_hessian(
         Sub-block of full Hessian identified by free-indices
 
     """
-
     num_free = len(free_indices)
     H = np.zeros((num_free, num_free))
     for i in range(num_free):
@@ -1523,8 +1520,7 @@ def tt_loglikelihood_row(
     model_row: np.ndarray,
     Pi: np.ndarray,
 ) -> float:
-    """
-    Compute log-likelihood of one row subproblem
+    """Compute log-likelihood of one row subproblem.
 
     Parameters
     ----------
@@ -1618,11 +1614,10 @@ def get_search_dir_pqnr(  # noqa: PLR0913
     URL: http://arxiv.org/abs/1304.4964. Submitted for publication.
 
     """
-
     lbfgsSize = delta_model.shape[1]
 
     # Determine active and free variables.
-    # TODO: is the bellow relevant?
+    # TODO: is the below relevant?
     # If epsActSet is zero, then the following works:
     # fixedVars = find((m_row == 0) & (grad' > 0));
     # For the general case this works but is less clear and assumes m_row > 0:
@@ -1679,8 +1674,7 @@ def calc_grad(
     data_row: np.ndarray,
     model_row: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute the gradient for a PQNR row subproblem
+    """Compute the gradient for a PQNR row subproblem.
 
     Parameters
     ----------
@@ -1710,6 +1704,7 @@ def calc_grad(
     return grad_row, phi_row
 
 
+# TODO verify what pi is
 # Mu helper functions
 def calculate_pi(
     Data: Union[ttb.sptensor, ttb.tensor],
@@ -1718,9 +1713,7 @@ def calculate_pi(
     factorIndex: int,
     ndims: int,
 ) -> np.ndarray:
-    """
-    Helper function to calculate Pi matrix
-    # TODO verify what pi is
+    """Calculate Pi matrix.
 
     Parameters
     ----------
@@ -1758,7 +1751,7 @@ def calculate_phi(  # noqa: PLR0913
     Pi: np.ndarray,
     epsilon: float,
 ) -> np.ndarray:
-    """
+    """Calculate Phi.
 
     Parameters
     ----------
@@ -1768,9 +1761,6 @@ def calculate_phi(  # noqa: PLR0913
     factorIndex:
     Pi:
     epsilon:
-
-    Returns
-    -------
 
     """
     if isinstance(Data, ttb.sptensor):
@@ -1786,7 +1776,7 @@ def calculate_phi(  # noqa: PLR0913
             )
             Phi[:, r] = Yr
     else:
-        Xn = Data.to_tenmat(np.array([factorIndex]), copy=False).data
+        Xn = Data.to_tenmat(np.array([factorIndex], order=Data.order), copy=False).data
         V = Model.factor_matrices[factorIndex].dot(Pi.transpose())
         W = Xn / np.maximum(V, epsilon)
         Y = W.dot(Pi)
@@ -1831,8 +1821,8 @@ def tt_loglikelihood(
             np.sum(Data.vals * np.log(np.sum(A, axis=1))[:, None])
             - np.sum(Model.factor_matrices[0])
         )
-    dX = Data.to_tenmat(np.array([1]), copy=False).data
-    dM = Model.to_tenmat(np.array([1]), copy=False).data
+    dX = Data.to_tenmat(np.array([1], order=Data.order), copy=False).data
+    dM = Model.to_tenmat(np.array([1], order=Model.order), copy=False).data
     f = 0
     for i in range(dX.shape[0]):
         for j in range(dX.shape[1]):
@@ -1846,8 +1836,7 @@ def tt_loglikelihood(
 
 
 def vectorize_for_mu(matrix: np.ndarray) -> np.ndarray:
-    """
-    Helper Function to unravel matrix into vector
+    """Unravel matrix into vector.
 
     Parameters
     ----------

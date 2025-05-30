@@ -1,6 +1,6 @@
-"""Evaluate Functions And Gradients based on Subsamples"""
+"""Evaluate Functions And Gradients based on Subsamples."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -65,7 +65,7 @@ def estimate(  # noqa: PLR0913
     lambda_check: bool = True,
     crng: Optional[np.ndarray] = None,
 ) -> Union[float, List[np.ndarray], Tuple[float, List[np.ndarray]]]:
-    """Estimate the GCP function and gradient with a subsample
+    """Estimate the GCP function and gradient with a subsample.
 
     Parameters
     ----------
@@ -142,7 +142,7 @@ def estimate(  # noqa: PLR0913
 def estimate_helper(
     factors: List[np.ndarray], subs: np.ndarray
 ) -> Tuple[np.ndarray, List[np.ndarray]]:
-    """Extract model values at sample locations and exploded Zk's
+    """Extract model values at sample locations and exploded Zk's.
 
     Parameters
     ----------
@@ -162,7 +162,7 @@ def estimate_helper(
     ndim = subs.shape[1]
 
     # Create exploded U's from the model factor matrices
-    Uexp = [np.empty(())] * ndim
+    Uexp = [np.empty((), dtype=factors[0].dtype)] * ndim
     for k in range(ndim):
         Uexp[k] = factors[k][subs[:, k], :]
 

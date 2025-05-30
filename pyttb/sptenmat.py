@@ -1,26 +1,27 @@
 """Classes and functions for working with matricized sparse tensors."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 from numpy_groupies import aggregate as accumarray
 from scipy import sparse
 
 import pyttb as ttb
-from pyttb.pyttb_utils import gather_wrap_dims, np_to_python, tt_ind2sub
+from pyttb.pyttb_utils import (
+    gather_wrap_dims,
+    np_to_python,
+    tt_ind2sub,
+)
 
 
 class sptenmat:
-    """
-    SPTENMAT Store sparse tensor as a sparse matrix.
-
-    """
+    """Store sparse tensor as a sparse matrix."""
 
     __slots__ = ("tshape", "rdims", "cdims", "subs", "vals")
 
@@ -33,8 +34,9 @@ class sptenmat:
         tshape: Tuple[int, ...] = (),
         copy: bool = True,
     ):
-        """
-        Construct a :class:`pyttb.sptenmat` from a set of 2D subscripts (subs)
+        """Construct a :class:`pyttb.sptenmat`.
+
+        Constructed from a set of 2D subscripts (subs)
         and values (vals) along with the mappings of the row (rdims) and column
         indices (cdims) and the shape of the original tensor (tshape).
 
@@ -62,7 +64,7 @@ class sptenmat:
 
         >>> S = ttb.sptenmat()
         >>> S # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape () with 0 nonzeros
+        sptenmat corresponding to a sptensor of shape () with 0 nonzeros and order F
         rdims = [  ] (modes of sptensor corresponding to rows)
         cdims = [  ] (modes of sptensor corresponding to columns)
 
@@ -80,7 +82,8 @@ class sptenmat:
             tshape=tshape\
         )
         >>> S # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (4, 4, 4) with 2 nonzeros
+        sptenmat corresponding to a sptensor of shape (4, 4, 4) with 2 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [1, 6] = 6
@@ -170,8 +173,9 @@ class sptenmat:
         cdims: Optional[np.ndarray] = None,
         tshape: Tuple[int, ...] = (),
     ):
-        """
-        Construct a :class:`pyttb.sptenmat` from a coo_matrix
+        """Construct a :class:`pyttb.sptenmat`.
+
+        Constructed from a coo_matrix
         along with the mappings of the row (rdims) and column
         indices (cdims) and the shape of the original tensor (tshape).
 
@@ -202,7 +206,8 @@ class sptenmat:
             tshape=tshape\
         )
         >>> S # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (4, 4, 4) with 2 nonzeros
+        sptenmat corresponding to a sptensor of shape (4, 4, 4) with 2 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [1, 6] = 6
@@ -219,6 +224,19 @@ class sptenmat:
             )
         subs = np.vstack(array.nonzero()).transpose()
         return ttb.sptenmat(subs, vals, rdims, cdims, tshape)
+
+    @property
+    def order(self) -> Literal["F"]:
+        """Return the data layout of the underlying storage."""
+        return "F"
+
+    def _matches_order(self, array: np.ndarray) -> bool:
+        """Check if provided array matches tensor memory layout."""
+        if array.flags["C_CONTIGUOUS"] and self.order == "C":
+            return True
+        if array.flags["F_CONTIGUOUS"] and self.order == "F":
+            return True
+        return False
 
     def copy(self) -> sptenmat:
         """
@@ -250,27 +268,28 @@ class sptenmat:
         )
 
     def __deepcopy__(self, memo):
+        """Return deepcopy of this sptenmat."""
         return self.copy()
 
     def to_sptensor(self) -> ttb.sptensor:
-        """
-        Contruct a :class:`pyttb.sptensor` from `:class:pyttb.sptenmat`
+        """Construct a :class:`pyttb.sptensor` from `:class:pyttb.sptenmat`.
 
         Examples
         --------
         >>> S1 = ttb.sptensor(shape=(2, 2, 2))
         >>> S1[0, 0, 0] = 1
         >>> S1  # doctest: +NORMALIZE_WHITESPACE
-        sparse tensor of shape (2, 2, 2) with 1 nonzeros
+        sparse tensor of shape (2, 2, 2) with 1 nonzeros and order F
         [0, 0, 0] = 1.0
         >>> ST1 = S1.to_sptenmat(np.array([0]))
         >>> ST1  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = 1.0
         >>> ST1.to_sptensor()  # doctest: +NORMALIZE_WHITESPACE
-        sparse tensor of shape (2, 2, 2) with 1 nonzeros
+        sparse tensor of shape (2, 2, 2) with 1 nonzeros and order F
         [0, 0, 0] = 1.0
         """
         vals = None
@@ -343,7 +362,7 @@ class sptenmat:
         >>> S1[0, 0, 0] = 1
         >>> ST1 = S1.to_sptenmat(np.array([0]))
         >>> ST1.full()  # doctest: +NORMALIZE_WHITESPACE
-        matrix corresponding to a tensor of shape (2, 2, 2)
+        matrix corresponding to a tensor of shape (2, 2, 2) with order F
         rindices = [ 0 ] (modes of tensor corresponding to rows)
         cindices = [ 1, 2 ] (modes of tensor corresponding to columns)
         data[:, :] =
@@ -351,7 +370,9 @@ class sptenmat:
          [0. 0. 0. 0.]]
         """
         # Create empty dense tenmat
-        result = ttb.tenmat(np.zeros(self.shape), self.rdims, self.cdims, self.tshape)
+        result = ttb.tenmat(
+            np.zeros(self.shape, order=self.order), self.rdims, self.cdims, self.tshape
+        )
         # Assign nonzero values
         result[tuple(self.subs.transpose())] = np.squeeze(self.vals)
         return result
@@ -372,9 +393,10 @@ class sptenmat:
         return len(self.vals)
 
     def norm(self) -> float:
-        """
-        Compute the norm (i.e., Frobenius norm, or square root of the sum of
-        squares of entries) of the :class:`pyttb.sptenmat`.
+        """Compute the norm of the :class:`pyttb.sptenmat`.
+
+        Frobenius norm, or square root of the sum of
+        squares of entries.
 
         Examples
         --------
@@ -423,7 +445,8 @@ class sptenmat:
         >>> S1[0, 0, 0] = 1
         >>> ST1 = S1.to_sptenmat(np.array([0]))
         >>> +ST1  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = 1.0
@@ -440,7 +463,8 @@ class sptenmat:
         >>> S1[0, 0, 0] = 1
         >>> ST1 = S1.to_sptenmat(np.array([0]))
         >>> -ST1  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = -1.0
@@ -459,7 +483,7 @@ class sptenmat:
 
         >>> ST = ttb.sptenmat(rdims=np.array([0]), tshape=(2, 2, 2))
         >>> ST  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 4) with 0 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 4) with 0 nonzeros and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
 
@@ -467,7 +491,8 @@ class sptenmat:
 
         >>> ST[0, 0] = 1.0
         >>> ST  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = 1.0
@@ -476,7 +501,8 @@ class sptenmat:
 
         >>> ST[0, 0] = 2.0
         >>> ST  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = 2.0
@@ -542,20 +568,21 @@ class sptenmat:
             self.vals = self.vals[sort_idx]
 
     def __repr__(self):
-        """
-        String representation of a :class:`pyttb.sptenmat`.
+        """Return string representation of a :class:`pyttb.sptenmat`.
 
         Examples
         --------
         >>> ttb.sptenmat()  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape () with 0 nonzeros
+        sptenmat corresponding to a sptensor of shape () with 0 nonzeros \
+        and order F
         rdims = [  ] (modes of sptensor corresponding to rows)
         cdims = [  ] (modes of sptensor corresponding to columns)
         >>> S1 = ttb.sptensor(shape=(2, 2, 2))
         >>> S1[0, 0, 0] = 1
         >>> ST1 = S1.to_sptenmat(np.array([0]))
         >>> ST1  # doctest: +NORMALIZE_WHITESPACE
-        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros
+        sptenmat corresponding to a sptensor of shape (2, 2, 2) with 1 nonzeros \
+        and order F
         rdims = [ 0 ] (modes of sptensor corresponding to rows)
         cdims = [ 1, 2 ] (modes of sptensor corresponding to columns)
             [0, 0] = 1.0
@@ -572,8 +599,7 @@ class sptenmat:
             s += str(np_to_python(self.shape))
         else:
             s += f"{np_to_python(self.tshape)!r}"
-        s += " with " + str(self.vals.size) + " nonzeros"
-        s += "\n"
+        s += f" with {self.vals.size} nonzeros and order {self.order}\n"
 
         s += "rdims = "
         s += "[ " + (", ").join([str(int(d)) for d in self.rdims]) + " ] "
@@ -604,3 +630,9 @@ class sptenmat:
         return s
 
     __str__ = __repr__
+
+
+if __name__ == "__main__":
+    import doctest  # pragma: no cover
+
+    doctest.testmod()  # pragma: no cover

@@ -1,6 +1,6 @@
-"""Tucker Tensor Implementation"""
+"""Tucker Tensor Implementation."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import logging
 import textwrap
-from copy import deepcopy
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import scipy
@@ -17,21 +16,20 @@ from scipy import sparse
 
 import pyttb as ttb
 from pyttb import pyttb_utils as ttb_utils
+from pyttb.pyttb_utils import OneDArray, parse_one_d, to_memory_order
 
 ALT_CORE_ERROR = "TTensor doesn't support non-tensor cores yet. Only tensor/sptensor."
 
 
 class ttensor:
-    """
-    TTENSOR Class for Tucker tensors (decomposed).
-    """
+    """Class for Tucker tensors (decomposed)."""
 
     __slots__ = ("core", "factor_matrices")
 
     def __init__(
         self,
         core: Optional[Union[ttb.tensor, ttb.sptensor]] = None,
-        factors: Optional[List[np.ndarray]] = None,
+        factors: Optional[Sequence[np.ndarray]] = None,
         copy: bool = True,
     ) -> None:
         """
@@ -78,17 +76,57 @@ class ttensor:
             )
 
         if isinstance(core, (ttb.tensor, ttb.sptensor)):
+            if not all(
+                isinstance(fm, (np.ndarray, sparse.coo_matrix)) for fm in factors
+            ):
+                raise ValueError(
+                    "Factor matrices must be numpy arrays or scipy sparse coo_matrices"
+                    f"but received {[type(fm) for fm in factors]}."
+                )
             if copy:
+                # TODO when generalizing tensor order add order argument to copy
                 self.core = core.copy()
-                self.factor_matrices = deepcopy(factors)
+                self.factor_matrices = [
+                    to_memory_order(fm, self.order, copy=True) for fm in factors
+                ]
             else:
+                if self.order != core.order:
+                    # This isn't possible right now
+                    raise ValueError("Core tensor doesn't match Tucker Tensor Order")
+                if not all(self._matches_order(factor) for factor in factors):
+                    logging.warning(
+                        "Selected no copy, but input factor matrices aren't "
+                        f"{self.order} ordered so must copy."
+                    )
+                    factors = [
+                        to_memory_order(fm, self.order, copy=True) for fm in factors
+                    ]
                 self.core = core
-                self.factor_matrices = factors
+                if isinstance(factors, list):
+                    self.factor_matrices = factors
+                else:
+                    logging.warning(
+                        "Must provide factor matrices as list to avoid copy"
+                    )
+                    self.factor_matrices = list(factors)
         else:
             # TODO support any tensor type with supported ops
             raise ValueError(ALT_CORE_ERROR)
         self._validate_ttensor()
         return
+
+    @property
+    def order(self) -> Literal["F"]:
+        """Return the data layout of the underlying storage."""
+        return "F"
+
+    def _matches_order(self, array: np.ndarray) -> bool:
+        """Check if provided array matches tensor memory layout."""
+        if array.flags["C_CONTIGUOUS"] and self.order == "C":
+            return True
+        if array.flags["F_CONTIGUOUS"] and self.order == "F":
+            return True
+        return False
 
     def copy(self) -> ttensor:
         """Make a deep copy of a :class:`pyttb.ttensor`.
@@ -117,10 +155,11 @@ class ttensor:
         return ttb.ttensor(self.core, self.factor_matrices, copy=True)
 
     def __deepcopy__(self, memo):
+        """Return deepcopy of class."""
         return self.copy()
 
     def _validate_ttensor(self):
-        """Verifies the validity of constructed ttensor"""
+        """Verify constructed ttensor."""
         # Confirm all factors are matrices
         for factor_idx, factor in enumerate(self.factor_matrices):
             if not isinstance(factor, (np.ndarray, sparse.coo_matrix)):
@@ -154,8 +193,7 @@ class ttensor:
         return tuple(factor.shape[0] for factor in self.factor_matrices)
 
     def __repr__(self):  # pragma: no cover
-        """
-        String representation of a tucker tensor.
+        """Return string representation of a tucker tensor.
 
         Returns
         -------
@@ -163,7 +201,8 @@ class ttensor:
             Contains the core, and factor matrices as strings on different lines.
         """
         display_string = f"Tensor of shape: {self.shape}\n" f"\tCore is a\n"
-        display_string += textwrap.indent(str(self.core), "\t")
+        display_string += textwrap.indent(str(self.core), "\t\t")
+        display_string += "\n"
 
         for factor_idx, factor in enumerate(self.factor_matrices):
             display_string += f"\tU[{factor_idx}] = \n"
@@ -174,7 +213,8 @@ class ttensor:
     __str__ = __repr__
 
     def to_tensor(self) -> ttb.tensor:
-        """Convenience method to convert to tensor.
+        """Convert to tensor.
+
         Same as :meth:`pyttb.ttensor.full`
         """
         return self.full()
@@ -189,8 +229,7 @@ class ttensor:
         return recomposed_tensor
 
     def double(self) -> np.ndarray:
-        """
-        Convert ttensor to an array of doubles
+        """Convert ttensor to an array of doubles.
 
         Returns
         -------
@@ -210,8 +249,7 @@ class ttensor:
         return len(self.factor_matrices)
 
     def isequal(self, other: ttensor) -> bool:
-        """
-        Component equality for ttensors
+        """Component equality for ttensors.
 
         Parameters
         ----------
@@ -241,12 +279,10 @@ class ttensor:
         -------
         :class:`pyttb.ttensor`, copy of tensor
         """
-
         return self.copy()
 
     def __neg__(self):
-        """
-        Unary minus (-) for ttensors
+        """Unary minus (-) for ttensors.
 
         Returns
         -------
@@ -257,8 +293,7 @@ class ttensor:
     def innerprod(
         self, other: Union[ttb.tensor, ttb.sptensor, ttb.ktensor, ttb.ttensor]
     ) -> float:
-        """
-        Efficient inner product with a ttensor
+        """Efficient inner product with a ttensor.
 
         Parameters
         ----------
@@ -306,8 +341,7 @@ class ttensor:
         )
 
     def __mul__(self, other):
-        """
-        Element wise multiplication (*) for ttensors (only scalars supported)
+        """Element wise multiplication (*) for ttensors (only scalars supported).
 
         Parameters
         ----------
@@ -325,8 +359,7 @@ class ttensor:
         )
 
     def __rmul__(self, other):
-        """
-        Element wise right multiplication (*) for ttensors (only scalars supported)
+        """Element wise right multiplication (*) for ttensors (only scalars supported).
 
         Parameters
         ----------
@@ -342,12 +375,11 @@ class ttensor:
 
     def ttv(
         self,
-        vector: Union[List[np.ndarray], np.ndarray],
-        dims: Optional[Union[int, np.ndarray]] = None,
-        exclude_dims: Optional[Union[int, np.ndarray]] = None,
+        vector: Union[Sequence[np.ndarray], np.ndarray],
+        dims: Optional[OneDArray] = None,
+        exclude_dims: Optional[OneDArray] = None,
     ) -> Union[float, ttensor]:
-        """
-        TTensor times vector
+        """TTensor times vector.
 
         Parameters
         ----------
@@ -358,15 +390,6 @@ class ttensor:
         exclude_dims:
             Alternative multiply by all dimensions but these.
         """
-        if dims is None and exclude_dims is None:
-            dims = np.array([])
-        # TODO make helper function to check scalar since re-used many places
-        elif isinstance(dims, (float, int)):
-            dims = np.array([dims])
-
-        if isinstance(exclude_dims, (float, int)):
-            exclude_dims = np.array([exclude_dims])
-
         # Check that vector is a list of vectors,
         # if not place single vector as element in list
         if (
@@ -403,7 +426,9 @@ class ttensor:
         assert not isinstance(newcore, float)
         return ttensor(newcore, [self.factor_matrices[dim] for dim in remdims])
 
-    def mttkrp(self, U: Union[ttb.ktensor, List[np.ndarray]], n: int) -> np.ndarray:
+    def mttkrp(
+        self, U: Union[ttb.ktensor, Sequence[np.ndarray]], n: Union[int, np.integer]
+    ) -> np.ndarray:
         """
         Matricized tensor times Khatri-Rao product for ttensors.
 
@@ -420,7 +445,7 @@ class ttensor:
         """
         # NOTE: MATLAB version calculates an unused R here
 
-        W = [np.empty(())] * self.ndims
+        W = [np.empty((), order=self.order)] * self.ndims
         if isinstance(U, ttb.ktensor):
             U = U.factor_matrices
         for i in range(0, self.ndims):
@@ -431,11 +456,12 @@ class ttensor:
         Y = self.core.mttkrp(W, n)
 
         # Find each column of answer by multiplying by weights
-        return self.factor_matrices[n].dot(Y)
+        return to_memory_order(self.factor_matrices[n].dot(Y), self.order)
 
     def norm(self) -> float:
         """
         Compute the norm of a ttensor.
+
         Returns
         -------
         Frobenius norm of Tensor.
@@ -449,7 +475,7 @@ class ttensor:
             return np.sqrt(tmp)
         return self.full().norm()
 
-    def permute(self, order: np.ndarray) -> ttensor:
+    def permute(self, order: OneDArray) -> ttensor:
         """
         Permute :class:`pyttb.ttensor` dimensions.
 
@@ -467,6 +493,7 @@ class ttensor:
         -------
         Permuted :class:`pyttb.ttensor`.
         """
+        order = parse_one_d(order)
         if not np.array_equal(np.arange(0, self.ndims), np.sort(order)):
             raise ValueError("Invalid permutation")
         new_core = self.core.permute(order)
@@ -475,13 +502,12 @@ class ttensor:
 
     def ttm(
         self,
-        matrix: Union[np.ndarray, List[np.ndarray]],
+        matrix: Union[np.ndarray, Sequence[np.ndarray]],
         dims: Optional[Union[float, np.ndarray]] = None,
         exclude_dims: Optional[Union[int, np.ndarray]] = None,
         transpose: bool = False,
     ) -> ttensor:
-        """
-        Tensor times matrix for ttensor
+        """Tensor times matrix for ttensor.
 
         Parameters
         ----------
@@ -497,14 +523,14 @@ class ttensor:
         if dims is None and exclude_dims is None:
             dims = np.arange(self.ndims)
         elif isinstance(dims, list):
-            dims = np.array(dims)
+            dims = np.array(dims, order=self.order)
         elif isinstance(dims, (float, int, np.generic)):
-            dims = np.array([dims])
+            dims = np.array([dims], order=self.order)
 
         if isinstance(exclude_dims, (float, int)):
-            exclude_dims = np.array([exclude_dims])
+            exclude_dims = np.array([exclude_dims], order=self.order)
 
-        if not isinstance(matrix, list):
+        if not isinstance(matrix, Sequence):
             return self.ttm([matrix], dims, exclude_dims, transpose)
 
         # Check that the dimensions are valid
@@ -530,8 +556,8 @@ class ttensor:
 
     def reconstruct(  # noqa: PLR0912
         self,
-        samples: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
-        modes: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
+        samples: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
+        modes: Optional[Union[np.ndarray, Sequence[np.ndarray]]] = None,
     ) -> ttb.tensor:
         """
         Reconstruct or partially reconstruct tensor from ttensor.
@@ -559,14 +585,14 @@ class ttensor:
 
         if modes is None:
             modes = np.arange(self.ndims)
-        elif isinstance(modes, list):
-            modes = np.array(modes)
+        elif isinstance(modes, Sequence):
+            modes = np.array(modes, order=self.order)
         elif np.isscalar(modes):
-            modes = np.array([modes])
+            modes = np.array([modes], order=self.order)
 
         if np.isscalar(samples):
-            samples = [np.array([samples])]
-        elif not isinstance(samples, list):
+            samples = [np.array([samples], order=self.order)]
+        elif not isinstance(samples, Sequence):
             samples = [samples]
 
         unequal_lengths = len(samples) > 0 and len(samples) != len(modes)
@@ -576,10 +602,10 @@ class ttensor:
                 f"samples had length {len(samples)} and modes {len(modes)}"
             )
 
-        full_samples = [np.array([])] * self.ndims
+        full_samples = [np.array([], order=self.order)] * self.ndims
         for sample, mode in zip(samples, modes):
             if np.isscalar(sample):
-                full_samples[mode] = np.array([sample])
+                full_samples[mode] = np.array([sample], order=self.order)
             else:
                 full_samples[mode] = sample
 
@@ -629,16 +655,20 @@ class ttensor:
         H = self.core.ttm(V)
 
         if isinstance(H, ttb.sptensor):
-            HnT = H.to_sptenmat(np.array([n]), cdims_cyclic="t").double()
+            HnT = H.to_sptenmat(
+                np.array([n], order=self.order), cdims_cyclic="t"
+            ).double()
         else:
-            HnT = H.full().to_tenmat(cdims=np.array([n])).double()
+            HnT = H.full().to_tenmat(cdims=np.array([n], order=self.order)).double()
 
         G = self.core
 
         if isinstance(G, ttb.sptensor):
-            GnT = G.to_sptenmat(np.array([n]), cdims_cyclic="t").double()
+            GnT = G.to_sptenmat(
+                np.array([n], order=self.order), cdims_cyclic="t"
+            ).double()
         else:
-            GnT = G.full().to_tenmat(cdims=np.array([n])).double()
+            GnT = G.full().to_tenmat(cdims=np.array([n], order=self.order)).double()
 
         # Compute Xn * Xn'
         # Big hack because if RHS is sparse wrong dot product is used
@@ -673,3 +703,9 @@ class ttensor:
                 if v[idx[i], i] < 0:
                     v[:, i] *= -1
         return v
+
+
+if __name__ == "__main__":
+    import doctest  # pragma: no cover
+
+    doctest.testmod()  # pragma: no cover

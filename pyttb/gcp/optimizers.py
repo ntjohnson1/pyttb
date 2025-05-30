@@ -1,6 +1,6 @@
-"""Optimizer Implementations for GCP"""
+"""Optimizer Implementations for GCP."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -23,7 +23,7 @@ from pyttb.gcp.samplers import GCPSampler
 
 
 class StochasticSolver(ABC):
-    """Interface for Stochastic GCP Solvers"""
+    """Interface for Stochastic GCP Solvers."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -35,7 +35,7 @@ class StochasticSolver(ABC):
         max_iters: int = 1000,
         printitn: int = 1,
     ):
-        """General Setup for Stochastic Solvers
+        """General Setup for Stochastic Solvers.
 
         Parameters
         ----------
@@ -70,7 +70,7 @@ class StochasticSolver(ABC):
         gradient: List[np.ndarray],
         lower_bound: float,
     ) -> Tuple[List[np.ndarray], float]:
-        """Calculates the update step for the solver
+        """Calculate the update step for the solver.
 
         Parameters
         ----------
@@ -89,7 +89,7 @@ class StochasticSolver(ABC):
 
     @abstractmethod
     def set_failed_epoch(self):
-        """Set internal state on failed epoch"""
+        """Set internal state on failed epoch."""
 
     def solve(  # noqa: PLR0913
         self,
@@ -100,7 +100,7 @@ class StochasticSolver(ABC):
         lower_bound: float = -np.inf,
         sampler: Optional[GCPSampler] = None,
     ) -> Tuple[ttb.ktensor, Dict]:
-        """Run solver until completion
+        """Run solver until completion.
 
         Parameters
         ----------
@@ -242,9 +242,9 @@ class StochasticSolver(ABC):
 
 
 class SGD(StochasticSolver):
-    """General Stochastic Gradient Descent"""
+    """General Stochastic Gradient Descent."""
 
-    def update_step(
+    def update_step(  # noqa: D102
         self, model: ttb.ktensor, gradient: List[np.ndarray], lower_bound: float
     ) -> Tuple[List[np.ndarray], float]:
         step = self._decay**self._nfails * self._rate
@@ -254,13 +254,13 @@ class SGD(StochasticSolver):
         ]
         return factor_matrices, step
 
-    def set_failed_epoch(self):
+    def set_failed_epoch(self):  # noqa: D102
         # No additional internal state for SGD
         pass
 
 
 class Adam(StochasticSolver):
-    """Adam Optimizer"""
+    """Adam Optimizer."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -275,7 +275,7 @@ class Adam(StochasticSolver):
         beta_2: float = 0.999,
         epsilon: float = 1e-8,
     ):
-        """General Setup for Adam Solver
+        """General Setup for Adam Solver.
 
         Parameters
         ----------
@@ -318,14 +318,14 @@ class Adam(StochasticSolver):
         self._v: List[np.ndarray] = []
         self._v_prev: List[np.ndarray] = []
 
-    def set_failed_epoch(
+    def set_failed_epoch(  # noqa: D102
         self,
     ):
         self._total_iterations -= self._epoch_iters
         self._m = self._m_prev.copy()
         self._v = self._v_prev.copy()
 
-    def update_step(
+    def update_step(  # noqa: D102
         self, model: ttb.ktensor, gradient: List[np.ndarray], lower_bound: float
     ) -> Tuple[List[np.ndarray], float]:
         if self._total_iterations == 0:
@@ -364,7 +364,7 @@ class Adam(StochasticSolver):
 
 
 class Adagrad(StochasticSolver):
-    """Adagrad Optimizer"""
+    """Adagrad Optimizer."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -387,12 +387,12 @@ class Adagrad(StochasticSolver):
         )
         self._gnormsum = 0.0
 
-    def set_failed_epoch(
+    def set_failed_epoch(  # noqa: D102
         self,
     ):
         self._gnormsum = 0.0
 
-    def update_step(
+    def update_step(  # noqa: D102
         self, model: ttb.ktensor, gradient: List[np.ndarray], lower_bound: float
     ) -> Tuple[List[np.ndarray], float]:
         self._gnormsum += np.sum([np.sum(gk**2) for gk in gradient])
@@ -406,7 +406,7 @@ class Adagrad(StochasticSolver):
 
 # If we use more scipy optimizers in the future we should generalize this
 class LBFGSB_Base:
-    """Base functionality of LBFGSB Solver
+    """Base functionality of LBFGSB Solver.
 
     Doesn't enforce the solve method since it can have different signatures downstream
     """
@@ -424,7 +424,7 @@ class LBFGSB_Base:
         callback: Optional[Callable[[np.ndarray], None]] = None,
         maxls: Optional[int] = None,
     ):
-        """Setup all hyper-parameters for solver.
+        """Prepare all hyper-parameters for solver.
 
         See scipy for details and standard defaults.
         A variety of defaults are set specifically for gcp opt.
@@ -495,13 +495,13 @@ class LBFGSB_Base:
 
         lbfgsb_info["final_f"] = final_f
         lbfgsb_info["callback"] = vars(monitor)
-        # Unregister monitor in case of re-use
+        # Unregister monitor in case of reuse
         self._solver_kwargs["callback"] = monitor.callback
         return model, lbfgsb_info
 
 
 class LBFGSB(LBFGSB_Base):
-    """Simple wrapper around scipy lbfgsb
+    """Simple wrapper around scipy lbfgsb.
 
     NOTE: If used for publications please see scipy documentation for adding citation
     for the implementation.
@@ -537,7 +537,7 @@ class LBFGSB(LBFGSB_Base):
         lower_bound: float = -np.inf,
         mask: Optional[np.ndarray] = None,
     ) -> Tuple[ttb.ktensor, Dict]:
-        """Solves the defined optimization problem"""
+        """Solves the defined optimization problem."""
         model = initial_model.copy()
 
         lbfgsb_func_grad = self._get_lbfgsb_func_grad(
@@ -558,6 +558,8 @@ class LBFGSB(LBFGSB_Base):
 
 
 class Monitor(dict):
+    """Monitor LBFGSB Timings."""
+
     def __init__(
         self,
         maxiter: int,
@@ -569,6 +571,7 @@ class Monitor(dict):
         self._callback = callback
 
     def __call__(self, xk: np.ndarray) -> None:
+        """Update monitor."""
         if self._callback is not None:
             self._callback(xk)
         self.time_trace[self.iter] = time.perf_counter() - self.startTime
@@ -576,10 +579,12 @@ class Monitor(dict):
 
     @property
     def callback(self):
+        """Return stored callback."""
         return self._callback
 
     @property
     def __dict__(self):
+        """Monitor Entries."""
         if not self._callback:
             return {"time_trace": self.time_trace}
         else:

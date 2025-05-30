@@ -1,4 +1,4 @@
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -82,7 +82,7 @@ def test_cp_als_incorrect_init(capsys, sample_tensor):
         (M, Minit, output) = ttb.cp_als(T, 2, init="init")
     assert "The selected initialization method is not supported" in str(excinfo)
 
-    # incorrect size of intial ktensor
+    # incorrect size of initial ktensor
     Tshape_incorrect = list(T.shape)
     Tshape_incorrect[0] = Tshape_incorrect[0] + 1
     Tshape_incorrect = tuple(Tshape_incorrect)

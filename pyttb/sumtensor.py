@@ -1,6 +1,6 @@
 """Classes and functions for working with implicit sums of tensors."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import warnings
 from copy import deepcopy
 from textwrap import indent
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
@@ -18,10 +18,7 @@ from pyttb.pyttb_utils import np_to_python
 
 
 class sumtensor:
-    """
-    SUMTENSOR Class for implicit sum of other tensors.
-
-    """
+    """Class for implicit sum of other tensors."""
 
     def __init__(
         self,
@@ -30,8 +27,8 @@ class sumtensor:
         ] = None,
         copy: bool = True,
     ):
-        """
-        Creates a :class:`pyttb.sumtensor` from a collection of tensors.
+        """Create a :class:`pyttb.sumtensor` from a collection of tensors.
+
         Each provided tensor is explicitly retained. All provided tensors
         must have the same shape but can be combinations of types.
 
@@ -43,7 +40,7 @@ class sumtensor:
             Whether to make a copy of provided data or just reference it.
 
         Examples
-        -------
+        --------
         Create an empty :class:`pyttb.tensor`:
 
         >>> T1 = ttb.tenones((3, 4, 5))
@@ -62,6 +59,19 @@ class sumtensor:
         if copy:
             tensors = deepcopy(tensors)
         self.parts = tensors
+
+    @property
+    def order(self) -> Literal["F"]:
+        """Return the data layout of the underlying storage."""
+        return "F"
+
+    def _matches_order(self, array: np.ndarray) -> bool:
+        """Check if provided array matches tensor memory layout."""
+        if array.flags["C_CONTIGUOUS"] and self.order == "C":
+            return True
+        if array.flags["F_CONTIGUOUS"] and self.order == "F":
+            return True
+        return False
 
     def copy(self) -> sumtensor:
         """Make a deep copy of a :class:`pyttb.sumtensor`.
@@ -85,17 +95,18 @@ class sumtensor:
         return ttb.sumtensor(self.parts, copy=True)
 
     def __deepcopy__(self, memo):
+        """Return deepcopy of this sumtensor."""
         return self.copy()
 
     @property
     def shape(self) -> Tuple[int, ...]:
+        """Shape of a :class:`pyttb.sumtensor`."""
         if len(self.parts) == 0:
             return ()
         return self.parts[0].shape
 
     def __repr__(self):
-        """
-        String representation of the sumtensor.
+        """Return string representation of the sumtensor.
 
         Returns
         -------
@@ -108,12 +119,12 @@ class sumtensor:
         >>> ttb.sumtensor([T1, T2])  # doctest: +NORMALIZE_WHITESPACE
         sumtensor of shape (2, 2) with 2 parts:
         Part 0:
-            tensor of shape (2, 2)
+            tensor of shape (2, 2) with order F
             data[:, :] =
             [[1. 1.]
              [1. 1.]]
         Part 1:
-            empty sparse tensor of shape (2, 2)
+            empty sparse tensor of shape (2, 2) with order F
         """
         if len(self.parts) == 0:
             return "Empty sumtensor"
@@ -247,6 +258,13 @@ class sumtensor:
         """
         return self.__add__(other)
 
+    def to_tensor(self) -> ttb.tensor:
+        """Return sumtensor converted to dense tensor.
+
+        Same as :meth:`pyttb.sumtensor.full`.
+        """
+        return self.full()
+
     def full(self) -> ttb.tensor:
         """
         Convert a :class:`pyttb.sumtensor` to a :class:`pyttb.tensor`.
@@ -260,7 +278,7 @@ class sumtensor:
         >>> T = ttb.tenones((2, 2))
         >>> S = ttb.sumtensor([T, T])
         >>> print(S.full())  # doctest: +NORMALIZE_WHITESPACE
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2. 2.]
          [2. 2.]]
@@ -292,9 +310,7 @@ class sumtensor:
     def innerprod(
         self, other: Union[ttb.tensor, ttb.sptensor, ttb.ktensor, ttb.ttensor]
     ) -> float:
-        """
-        Efficient inner product between a sumtensor and other `pyttb` tensors
-        (`tensor`, `sptensor`, `ktensor`, or `ttensor`).
+        """Efficient inner product between a sumtensor and other `pyttb` tensors.
 
         Parameters
         ----------
@@ -318,9 +334,12 @@ class sumtensor:
             result += part.innerprod(other)
         return result
 
-    def mttkrp(self, U: Union[ttb.ktensor, List[np.ndarray]], n: int) -> np.ndarray:
-        """
-        Matricized tensor times Khatri-Rao product. The matrices used in the
+    def mttkrp(
+        self, U: Union[ttb.ktensor, List[np.ndarray]], n: Union[int, np.integer]
+    ) -> np.ndarray:
+        """Matricized tensor times Khatri-Rao product.
+
+        The matrices used in the
         Khatri-Rao product are passed as a :class:`pyttb.ktensor` (where the
         factor matrices are used) or as a list of :class:`numpy.ndarray` objects.
 
@@ -396,17 +415,17 @@ class sumtensor:
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> S = ttb.sumtensor([T, T])
         >>> T.ttv(np.ones(2), 0)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [4. 6.]
         >>> S.ttv(np.ones(2), 0)  # doctest: +NORMALIZE_WHITESPACE
         sumtensor of shape (2,) with 2 parts:
         Part 0:
-             tensor of shape (2,)
+             tensor of shape (2,) with order F
              data[:] =
              [4. 6.]
         Part 1:
-             tensor of shape (2,)
+             tensor of shape (2,) with order F
              data[:] =
              [4. 6.]
         >>> T.ttv([np.ones(2), np.ones(2)])
@@ -428,8 +447,14 @@ class sumtensor:
         return ttb.sumtensor(new_parts, copy=False)
 
     def norm(self) -> float:
-        """Compatibility Interface. Just returns 0"""
+        """Compatibility Interface. Just returns 0."""
         warnings.warn(
-            "Sumtensor doesn't actually support norm. " "Returning 0 for compatibility."
+            "Sumtensor doesn't actually support norm. Returning 0 for compatibility."
         )
         return 0.0
+
+
+if __name__ == "__main__":
+    import doctest  # pragma: no cover
+
+    doctest.testmod()  # pragma: no cover

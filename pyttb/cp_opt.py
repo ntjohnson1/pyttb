@@ -1,4 +1,4 @@
-"""Fit a CP decomposition via optimization"""
+"""Fit a CP decomposition via optimization."""
 
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
@@ -32,6 +32,7 @@ def cp_opt(  # noqa:  PLR0913
     printitn: int = 1,
 ) -> Tuple[ttb.ktensor, ttb.ktensor, Dict]:
     """Fits a CP decomposition with user-specified optimizer.
+
     The objective being optimized is F(M) = || X - M ||^2 / || X ||^2
 
     Parameters
@@ -102,7 +103,7 @@ def _get_initial_guess(
         List[np.ndarray],
     ] = "random_normal",
 ) -> ttb.ktensor:
-    """Get initial guess for cp_opt
+    """Get initial guess for cp_opt.
 
     Returns
     -------

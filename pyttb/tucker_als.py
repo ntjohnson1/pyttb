@@ -1,31 +1,31 @@
-"""Tucker decomposition via Alternating Least Squares"""
+"""Tucker decomposition via Alternating Least Squares."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
 from numbers import Real
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, Literal, Optional, Tuple, Union
 
 import numpy as np
 
 import pyttb as ttb
+from pyttb.pyttb_utils import OneDArray, parse_one_d
 from pyttb.ttensor import ttensor
 
 
-def tucker_als(  # noqa: PLR0912,PLR0913,PLR0915
+def tucker_als(  # noqa: PLR0912, PLR0913, PLR0915
     input_tensor: ttb.tensor,
-    rank: Union[int, List[int], np.ndarray],
+    rank: OneDArray,
     stoptol: float = 1e-4,
     maxiters: int = 1000,
-    dimorder: Optional[List[int]] = None,
+    dimorder: Optional[OneDArray] = None,
     init: Union[Literal["random"], Literal["nvecs"], ttb.ktensor] = "random",
     printitn: int = 1,
 ) -> Tuple[ttensor, ttensor, Dict]:
-    """
-    Compute Tucker decomposition with alternating least squares
+    """Compute Tucker decomposition with alternating least squares.
 
     Parameters
     ----------
@@ -89,19 +89,17 @@ def tucker_als(  # noqa: PLR0912,PLR0913,PLR0915
             f"printitn must be a real valued scalar but received: {printitn}"
         )
 
-    if isinstance(rank, Real) or len(rank) == 1:
-        rank = rank * np.ones(N, dtype=int)
+    rank = parse_one_d(rank)
+    if len(rank) == 1:
+        rank = rank.repeat(N)
 
     # Set up dimorder if not specified
-    if not dimorder:
-        dimorder = list(range(N))
+    if dimorder is None:
+        dimorder = np.arange(N)
     else:
-        if not isinstance(dimorder, list):
-            raise ValueError("Dimorder must be a list")
+        dimorder = parse_one_d(dimorder)
         if tuple(range(N)) != tuple(sorted(dimorder)):
-            raise ValueError(
-                "Dimorder must be a list or permutation of range(tensor.ndims)"
-            )
+            raise ValueError("Dimorder must be a permutation of range(tensor.ndims)")
 
     if isinstance(init, list):
         Uinit = init
@@ -163,7 +161,7 @@ def tucker_als(  # noqa: PLR0912,PLR0913,PLR0915
         fit = 1 - (normresidual / normX)  # fraction explained by model
         fitchange = abs(fitold - fit)
 
-        if iteration % printitn == 0:
+        if (printitn > 0) and (divmod(iteration, printitn)[1] == 0):
             print(f" Iter {iteration}: fit = {fit:e} fitdelta = {fitchange:7.1e}")
 
         # Check for convergence

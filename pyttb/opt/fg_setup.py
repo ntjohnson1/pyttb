@@ -1,4 +1,4 @@
-"""Prepare Function and Gradient Handles for CP OPT"""
+"""Prepare Function and Gradient Handles for CP OPT."""
 
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
@@ -98,7 +98,7 @@ def setup(
     scale: float,
     Xnormsqr: float,
 ) -> fg_return:
-    """Collects the function and gradient handles for GCP
+    """Collect the function and gradient handles for GCP.
 
     Parameters
     ----------

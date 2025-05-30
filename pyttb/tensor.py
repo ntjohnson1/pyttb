@@ -1,16 +1,29 @@
-"""Classes and functions for working with dense tensors."""
+"""Classes and functions for dense tensors (hidden module)."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
 import logging
+import textwrap
 from collections.abc import Iterable
+from inspect import signature
 from itertools import combinations_with_replacement, permutations
-from math import factorial
-from typing import Any, Callable, List, Literal, Optional, Tuple, Union, overload
+from math import factorial, prod
+from typing import (
+    Any,
+    Callable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+    overload,
+)
 
 import numpy as np
 import scipy.sparse.linalg
@@ -18,40 +31,52 @@ from numpy_groupies import aggregate as accumarray
 from scipy import sparse
 
 import pyttb as ttb
+from pyttb.matlab.matlab_utilities import _matlab_array_str
 from pyttb.pyttb_utils import (
     IndexVariant,
+    MemoryLayout,
+    OneDArray,
+    Shape,
     gather_wrap_dims,
     get_index_variant,
     get_mttkrp_factors,
     np_to_python,
+    parse_one_d,
+    parse_shape,
+    to_memory_order,
     tt_dimscheck,
     tt_ind2sub,
     tt_sub2ind,
     tt_subsubsref,
-    tt_tenfun,
 )
 
 
 class tensor:
-    """
-    TENSOR Class for dense tensors.
+    """Class for dense tensors.
 
-    Contains the following data members:
+    Attributes
+    ----------
+        data : numpy.ndarray
+            Data of the tensor
+        shape : tuple of integers
+            Size of the tensor
 
-    ``data``: :class:`numpy.ndarray` dense array containing the data elements
-    of the tensor.
+    Instances of :class:`pyttb.tensor` can be created using :meth:`__init__`
+    or the following methods:
 
-    Instances of :class:`pyttb.tensor` can be created using `__init__()` or
-    the following method:
+        * :meth:`from_function` - Create a tensor from a function
+        * :meth:`copy` - Make a deep copy of a tensor
+        * :func:`tenones` - Create an all ones tensor of a specified size
+        * :func:`tenzeros` - Create an all zeros tensor of a specified size
+        * :func:`tenrand` - Create a random tensor of a specified size
+        * :func:`tendiag` - Create a tensor with a specified diagonal
+        * :func:`teneye` - Create an identity tensor
+        * :meth:`pyttb.sptensor.to_tensor` - Convert a sparse tensor to a dense tensor
+        * :meth:`pyttb.ktensor.to_tensor` - Convert a Kruskal tensor to a dense tensor
+        * :meth:`pyttb.ttensor.to_tensor` - Convert a Tucker tensor to a dense tensor
+        * :meth:`pyttb.tenmat.to_tensor` - Convert a tenmat to a dense tensor
 
-      * :meth:`from_function`
-
-    Examples
-    --------
-    For all examples listed below, the following module imports are assumed:
-
-    >>> import pyttb as ttb
-    >>> import numpy as np
+    See :doc:`/tutorial/class_tensor` for getting started with the tensor class.
     """
 
     __slots__ = ("data", "shape")
@@ -59,45 +84,77 @@ class tensor:
     def __init__(
         self,
         data: Optional[np.ndarray] = None,
-        shape: Optional[Tuple[int, ...]] = None,
+        shape: Optional[Shape] = None,
         copy: bool = True,
     ):
         """
-        Creates a :class:`pyttb.tensor` from a :class:`numpy.ndarray`
-
-        Note that 1D tensors (i.e., when len(shape)==1) contains a data
-        array that follow the Numpy convention of being a row vector.
+        Create a :class:`pyttb.tensor`.
 
         Parameters
         ----------
-        data:
-            Tensor source data.
-        shape:
-            Shape of resulting tensor if not the same as data shape.
-        copy:
-            Whether to make a copy of provided data or just reference it.
+        data : optional
+            Source data as :class:`numpy.ndarray`
+        shape : optional
+           Shape of the tensor as a :class:`tuple` or any iterable array of integers.
+           A single integer means that the tensor should be a 1D array.
+           If no shape is given, defaults to :attr:`numpy.ndarray.shape` of ``data``.
+           Otherwise, the data is reshaped to the specified shape.
+        copy : optional
+            Whether to deep copy (versus reference) the data.
+            By default, the data is deep copied.
 
         Examples
-        -------
-        Create an empty :class:`pyttb.tensor`:
+        --------
+        Create a :class:`pyttb.tensor` from a three-way :class:`numpy.ndarray`::
 
-        >>> T = ttb.tensor()
-        >>> print(T)
-        empty tensor of shape ()
-        data = []
+            >>> data = np.array([[[1,13],[5,17],[9,21]],
+            ... [[2,14],[6,18],[10,22]],
+            ... [[3,15],[7,19],[11,23]],
+            ...  [[4,16],[8,20],[12,24]]])
+            >>> T = ttb.tensor(data)
+            >>> print(T)
+            tensor of shape (4, 3, 2) with order F
+            data[:, :, 0] =
+            [[ 1  5  9]
+             [ 2  6 10]
+             [ 3  7 11]
+             [ 4  8 12]]
+            data[:, :, 1] =
+            [[13 17 21]
+             [14 18 22]
+             [15 19 23]
+             [16 20 24]]
 
-        Create a :class:`pyttb.tensor` from a :class:`numpy.ndarray`:
+        Create a :class:`pyttb.tensor` from a :class:`numpy.ndarray` vector and
+        reshape it::
 
-        >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
-        >>> print(T)
-        tensor of shape (2, 2)
-        data[:, :] =
-        [[1 2]
-         [3 4]]
+            >>> data = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
+            ... 17, 18, 19, 20, 21, 22, 23, 24])
+            >>> T = ttb.tensor(data, shape=(4, 3, 2))
+            >>> print(T)
+            tensor of shape (4, 3, 2) with order F
+            data[:, :, 0] =
+            [[ 1  5  9]
+             [ 2  6 10]
+             [ 3  7 11]
+             [ 4  8 12]]
+            data[:, :, 1] =
+            [[13 17 21]
+             [14 18 22]
+             [15 19 23]
+             [16 20 24]]
+
+        Create an empty :class:`pyttb.tensor`::
+
+            >>> T = ttb.tensor()
+            >>> print(T)
+            empty tensor of shape ()
+            data = []
+
         """
         if data is None:
             # EMPTY / DEFAULT CONSTRUCTOR
-            self.data: np.ndarray = np.array([])
+            self.data: np.ndarray = np.array([], order=self.order)
             self.shape: Tuple = ()
             return
 
@@ -110,15 +167,14 @@ class tensor:
         # Create or check second argument
         if shape is None:
             shape = data.shape
-        elif not isinstance(shape, tuple):
-            assert False, "Second argument must be a tuple."
+        shape = parse_shape(shape)
 
         # Make sure the number of elements matches what's been specified
         if len(shape) == 0:
             if data.size > 0:
                 assert False, "Empty tensor cannot contain any elements"
 
-        elif np.prod(shape) != data.size:
+        elif prod(shape) != data.size:
             assert (
                 False
             ), "TTB:WrongSize, Size of data does not match specified size of tensor"
@@ -126,32 +182,50 @@ class tensor:
         # Make sure the data is indeed the right shape
         if data.size > 0 and len(shape) > 0:
             # reshaping using Fortran ordering to match Matlab conventions
-            data = np.reshape(data, np.array(shape), order="F")
+            data = np.reshape(data, np.array(shape), order=self.order)
 
         # Create the tensor
         if copy:
-            self.data = data.copy()
+            self.data = data.copy(self.order)
         else:
-            self.data = data
+            if not self._matches_order(data):
+                logging.warning(
+                    f"Selected no copy, but input data isn't {self.order} ordered "
+                    "so must copy."
+                )
+            self.data = to_memory_order(data, self.order)
         self.shape = shape
         return
+
+    @property
+    def order(self) -> Literal["F"]:
+        """Return the data layout of the underlying storage."""
+        return "F"
+
+    def _matches_order(self, array: np.ndarray) -> bool:
+        """Check if provided array matches tensor memory layout."""
+        if array.flags["C_CONTIGUOUS"] and self.order == "C":
+            return True
+        if array.flags["F_CONTIGUOUS"] and self.order == "F":
+            return True
+        return False
 
     @classmethod
     def from_function(
         cls,
         function_handle: Callable[[Tuple[int, ...]], np.ndarray],
-        shape: Tuple[int, ...],
+        shape: Shape,
     ) -> tensor:
-        """
-        Construct a :class:`pyttb.tensor` whose data entries are set using
-        a function.
+        """Construct a :class:`pyttb.tensor` with data from a function.
 
         Parameters
         ----------
         function_handle:
             A function that can accept a shape (i.e., :class:`tuple` of
             dimension sizes) and return a :class:`numpy.ndarray` of that shape.
-            `numpy.zeros`, `numpy.ones`.
+            The array returned by the function should ideally be in Fortran order.
+            If that is not the case, an expensive reordering of the data will be
+            required. One way to avoid this reordering is to return a 1D vector.
         shape:
             Shape of the resulting tensor.
 
@@ -161,23 +235,48 @@ class tensor:
 
         Examples
         --------
-        Create a :class:`pyttb.tensor` with entries equal to 1:
+        Create a :class:`pyttb.tensor` with entries drawn from a normal distribution
+        using :func:`numpy.random.randn`. Observe that we actually generate a vector to
+        avoid having a C-ordered array (the default if we had provided the shape array)
+        be rearranged as a F-ordered array::
 
-        >>> T = ttb.tensor.from_function(np.ones, (2, 3, 4))
-        >>> print(T)
-        tensor of shape (2, 3, 4)
-        data[0, :, :] =
-        [[1. 1. 1. 1.]
-         [1. 1. 1. 1.]
-         [1. 1. 1. 1.]]
-        data[1, :, :] =
-        [[1. 1. 1. 1.]
-         [1. 1. 1. 1.]
-         [1. 1. 1. 1.]]
+            >>> randn = lambda s : np.random.randn(np.prod(s))
+            >>> np.random.seed(0) # reproducibility
+            >>> T = ttb.tensor.from_function(randn, (4, 3, 2))
+            >>> print(T)
+            tensor of shape (4, 3, 2) with order F
+            data[:, :, 0] =
+            [[ 1.76405235  1.86755799 -0.10321885]
+             [ 0.40015721 -0.97727788  0.4105985 ]
+             [ 0.97873798  0.95008842  0.14404357]
+             [ 2.2408932  -0.15135721  1.45427351]]
+            data[:, :, 1] =
+            [[ 0.76103773  1.49407907 -2.55298982]
+             [ 0.12167502 -0.20515826  0.6536186 ]
+             [ 0.44386323  0.3130677   0.8644362 ]
+             [ 0.33367433 -0.85409574 -0.74216502]]
+
+        Create a :class:`pyttb.tensor` with all entries equal to 1 using
+        :func:`numpy.ones`. Observe that we specifically specify Fortran order::
+
+            >>> T = ttb.tensor.from_function(lambda s: np.ones(s,order='F'), (2, 3, 4))
+            >>> print(T)
+            tensor of shape (2, 3, 4) with order F
+            data[:, :, 0] =
+            [[1. 1. 1.]
+             [1. 1. 1.]]
+            data[:, :, 1] =
+            [[1. 1. 1.]
+             [1. 1. 1.]]
+            data[:, :, 2] =
+            [[1. 1. 1.]
+             [1. 1. 1.]]
+            data[:, :, 3] =
+            [[1. 1. 1.]
+             [1. 1. 1.]]
         """
         # Check size
-        if not isinstance(shape, tuple):
-            assert False, "TTB:BadInput, Shape must be a tuple"
+        shape = parse_shape(shape)
 
         # Generate data
         data = function_handle(shape)
@@ -190,72 +289,114 @@ class tensor:
 
         Returns
         -------
-        Copy of original tensor.
+        Deep copy of original tensor.
 
         Examples
         --------
-        >>> T1 = ttb.tensor(np.ones((3, 2)))
-        >>> T2 = T1
-        >>> T3 = T2.copy()
-        >>> T1[0, 0] = 3
-        >>> T1[0, 0] == T2[0, 0]
-        True
-        >>> T1[0, 0] == T3[0, 0]
-        False
+        Observing the difference between a shallow copy and a deep copy. When the
+        original tensor changes, so does the shallow copy, but the deep copy does not::
+
+            >>> T = ttb.tensor(np.ones((3, 2)))
+            >>> T_shallow = T
+            >>> T_deep = T.copy()
+            >>> T[0, 0] = 3
+            >>> T[0, 0] == T_shallow[0, 0]
+            True
+            >>> T[0, 0] == T_deep[0, 0]
+            False
         """
         return ttb.tensor(self.data, self.shape, copy=True)
 
     def __deepcopy__(self, memo):
+        """Return deep copy of this tensor."""
         return self.copy()
 
     def collapse(
         self,
-        dims: Optional[np.ndarray] = None,
+        dims: Optional[OneDArray] = None,
         fun: Callable[[np.ndarray], Union[float, np.ndarray]] = np.sum,
     ) -> Union[float, np.ndarray, tensor]:
         """
-        Collapse tensor along specified dimensions.
+        Collapse tensor along specified dimensions using a function.
 
         Parameters
         ----------
-        dims:
-            Dimensions to collapse.
-        fun:
-            Method used to collapse dimensions.
+        dims: optional
+            Dimensions to collapse (default: all).
+        fun: optional
+            Method used to collapse dimensions (default: :meth:`numpy.sum`).
 
         Returns
         -------
-        Collapsed value.
+        Scalar (if all dimensions collapsed) or tensor.
 
         Examples
         --------
-        >>> T = ttb.tensor(np.ones((2, 2)))
-        >>> T.collapse()
-        4.0
-        >>> T.collapse(np.array([0]))
-        tensor of shape (2,)
-        data[:] =
-        [2. 2.]
-        >>> T.collapse(np.arange(T.ndims), sum)
-        4.0
-        >>> T.collapse(np.arange(T.ndims), np.prod)
-        1.0
+        Sum all elements of tensor::
+
+            >>> T = ttb.tensor(np.ones((4,3,2),order='F'))
+            >>> T.collapse()
+            24.0
+
+        Compute the sum for each mode-0 fiber (output is a tensor)::
+
+            >>> T.collapse(0)
+            tensor of shape (3, 2) with order F
+            data[:, :] =
+            [[4. 4.]
+             [4. 4.]
+             [4. 4.]]
+
+        Compute the sum of the entries in each mode-0 slice (output is a tensor)::
+
+            >>> T.collapse([1, 2])
+            tensor of shape (4,) with order F
+            data[:] =
+            [6. 6. 6. 6.]
+
+        Compute the max entry in each mode-2 slice (output is a tensor)::
+
+            >>> T.collapse([0, 1], np.max)
+            tensor of shape (2,) with order F
+            data[:] =
+            [1. 1.]
+
+        Find the maximum and minimum values in a tensor::
+
+            >>> randn = lambda s : np.random.randn(np.prod(s))
+            >>> np.random.seed(0) # reproducibility
+            >>> T = ttb.tensor.from_function(randn, (2, 2, 2))
+            >>> print(T)
+            tensor of shape (2, 2, 2) with order F
+            data[:, :, 0] =
+            [[1.76405235 0.97873798]
+             [0.40015721 2.2408932 ]]
+            data[:, :, 1] =
+            [[ 1.86755799  0.95008842]
+             [-0.97727788 -0.15135721]]
+            >>> max_val = T.collapse(fun=np.max)
+            >>> min_val = T.collapse(fun=np.min)
+            >>> print(f"Max value: {max_val}")
+            Max value: 2.240893199201458
+            >>> print(f"Min value: {min_val}")
+            Min value: -0.977277879876411
         """
         if self.data.size == 0:
-            return np.array([])
+            return np.array([], order=self.order)
 
         if dims is None:
             dims = np.arange(0, self.ndims)
 
+        dims, _ = tt_dimscheck(self.ndims, dims=dims)
+
         if dims.size == 0:
             return self.copy()
 
-        dims, _ = tt_dimscheck(self.ndims, dims=dims)
         remdims = np.setdiff1d(np.arange(0, self.ndims), dims)
 
         # Check for the case where we accumulate over *all* dimensions
         if remdims.size == 0:
-            result = fun(self.data.flatten("F"))
+            result = fun(self.data.flatten(self.order))
             if isinstance(result, np.generic):
                 result = result.item()
             return result
@@ -267,7 +408,7 @@ class tensor:
         A = self.to_tenmat(remdims, dims).double()
 
         ## Apply the collapse function
-        B = np.zeros((A.shape[0], 1))
+        B = np.zeros((A.shape[0], 1), order=self.order)
         for i in range(0, A.shape[0]):
             B[i] = fun(A[i, :])
 
@@ -296,23 +437,23 @@ class tensor:
         2.0
         >>> T = ttb.tensor(np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]]))
         >>> print(T)
-        tensor of shape (2, 2, 2)
-        data[0, :, :] =
-        [[1 2]
-         [3 4]]
-        data[1, :, :] =
-        [[5 6]
-         [7 8]]
+        tensor of shape (2, 2, 2) with order F
+        data[:, :, 0] =
+        [[1 3]
+         [5 7]]
+        data[:, :, 1] =
+        [[2 4]
+         [6 8]]
         >>> T.contract(0, 1)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [ 8. 10.]
         >>> T.contract(0, 2)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [ 7. 11.]
         >>> T.contract(1, 2)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [ 5. 13.]
         """
@@ -333,7 +474,7 @@ class tensor:
         newsize = tuple(np.array(self.shape)[remdims])
 
         # Total size of remainder
-        m = np.prod(newsize)
+        m = prod(newsize)
 
         # Number of items to add for trace
         n = self.shape[i1]
@@ -342,16 +483,16 @@ class tensor:
         x = self.permute(np.concatenate((remdims, np.array([i1, i2]))))
 
         # Reshape data to be 3D
-        data = np.reshape(x.data, (m, n, n), order="F")
+        data = np.reshape(x.data, (m, n, n), order=self.order)
 
         # Add diagonal entries for each slice
-        newdata = np.zeros((m, 1))
+        newdata = np.zeros((m, 1), order=self.order)
         for idx in range(0, n):
             newdata += data[:, idx, idx][:, None]
 
         # Reshape result
-        if np.prod(newsize) > 1:
-            newdata = np.reshape(newdata, newsize, order="F")
+        if prod(newsize) > 1:
+            newdata = np.reshape(newdata, newsize, order=self.order)
 
         return ttb.tensor(newdata, newsize, copy=False)
 
@@ -370,7 +511,7 @@ class tensor:
         array([[1., 1.],
                [1., 1.]])
         """
-        return self.data.astype(np.float64).copy()
+        return self.data.astype(np.float64, order=self.order, copy=True)
 
     def exp(self) -> tensor:
         """
@@ -403,7 +544,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1,2],[3,4]]))
         >>> print(T)
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1 2]
          [3 4]]
@@ -416,14 +557,13 @@ class tensor:
         array([[ True],
                [ True]])
         """
-        idx = np.nonzero(np.ravel(self.data, order="F"))[0]
+        idx = np.nonzero(np.ravel(self.data, order=self.order))[0]
         subs = tt_ind2sub(self.shape, idx)
         vals = self.data[tuple(subs.T)][:, None]
         return subs, vals
 
     def to_sptensor(self) -> ttb.sptensor:
-        """
-        Contruct a :class:`pyttb.sptensor` from `:class:pyttb.tensor`
+        """Construct a :class:`pyttb.sptensor` from `:class:pyttb.tensor`.
 
         Returns
         -------
@@ -433,13 +573,13 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[0, 2], [3, 0]]))
         >>> print(T)
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[0 2]
          [3 0]]
         >>> S = T.to_sptensor()
         >>> print(S)
-        sparse tensor of shape (2, 2) with 2 nonzeros
+        sparse tensor of shape (2, 2) with 2 nonzeros and order F
         [1, 0] = 3
         [0, 1] = 2
         """
@@ -466,9 +606,7 @@ class tensor:
         ] = None,
         copy: bool = True,
     ) -> ttb.tenmat:
-        """
-        Construct a :class:`pyttb.tenmat` from a :class:`pyttb.tensor` and
-        unwrapping details.
+        """Construct a :class:`pyttb.tenmat` from a :class:`pyttb.tensor`.
 
         Parameters
         ----------
@@ -478,7 +616,7 @@ class tensor:
             Mapping of column indices.
         cdims_cyclic:
             When only rdims is specified maps a single rdim to the rows and
-                the remaining dimensons span the columns. _fc_ (forward cyclic)
+                the remaining dimensions span the columns. _fc_ (forward cyclic)
                 in the order range(rdims,self.ndims()) followed by range(0, rdims).
                 _bc_ (backward cyclic) range(rdims-1, -1, -1) then
                 range(self.ndims(), rdims, -1).
@@ -503,16 +641,16 @@ class tensor:
         Create a :class:`pyttb.tensor`.
 
         >>> tshape = (2, 2, 2)
-        >>> data = np.reshape(np.arange(np.prod(tshape)), tshape)
+        >>> data = np.reshape(np.arange(prod(tshape)), tshape)
         >>> T = ttb.tensor(data)
         >>> T  # doctest: +NORMALIZE_WHITESPACE
-        tensor of shape (2, 2, 2)
-        data[0, :, :] =
-        [[0 1]
-         [2 3]]
-        data[1, :, :] =
-        [[4 5]
-         [6 7]]
+        tensor of shape (2, 2, 2) with order F
+        data[:, :, 0] =
+        [[0 2]
+         [4 6]]
+        data[:, :, 1] =
+        [[1 3]
+         [5 7]]
 
         Convert to a :class:`pyttb.tenmat` unwrapping around the first dimension.
             Either allow for implicit column or explicit column dimension
@@ -528,7 +666,7 @@ class tensor:
 
         >>> TM3 = T.to_tenmat(rdims=np.array([0]), cdims_cyclic="fc")
         >>> TM3  # doctest: +NORMALIZE_WHITESPACE
-        matrix corresponding to a tensor of shape (2, 2, 2)
+        matrix corresponding to a tensor of shape (2, 2, 2)  with order F
         rindices = [ 0 ] (modes of tensor corresponding to rows)
         cindices = [ 1, 2 ] (modes of tensor corresponding to columns)
         data[:, :] =
@@ -539,7 +677,7 @@ class tensor:
 
         >>> TM4 = T.to_tenmat(rdims=np.array([0]), cdims_cyclic="bc")
         >>> TM4  # doctest: +NORMALIZE_WHITESPACE
-        matrix corresponding to a tensor of shape (2, 2, 2)
+        matrix corresponding to a tensor of shape (2, 2, 2) with order F
         rindices = [ 0 ] (modes of tensor corresponding to rows)
         cindices = [ 2, 1 ] (modes of tensor corresponding to columns)
         data[:, :] =
@@ -576,16 +714,15 @@ class tensor:
         data = np.reshape(
             self.permute(dims).data,
             (rprod, cprod),
-            order="F",
+            order=self.order,
         )
+        assert data.flags["F_CONTIGUOUS"]
         return ttb.tenmat(data, rdims, cdims, tshape=tshape, copy=copy)
 
     def innerprod(
         self, other: Union[tensor, ttb.sptensor, ttb.ktensor, ttb.ttensor]
     ) -> float:
-        """
-        Efficient inner product between a tensor and other `pyttb` tensors
-        (`tensor`, `sptensor`, `ktensor`, or `ttensor`).
+        """Efficient inner product between a tensor and other `pyttb` tensors.
 
         Parameters
         ----------
@@ -604,8 +741,8 @@ class tensor:
         if isinstance(other, ttb.tensor):
             if self.shape != other.shape:
                 assert False, "Inner product must be between tensors of the same size"
-            x = np.reshape(self.data, (self.data.size,), order="F")
-            y = np.reshape(other.data, (other.data.size,), order="F")
+            x = np.reshape(self.data, (self.data.size,), order=self.order)
+            y = np.reshape(other.data, (other.data.size,), order=self.order)
             return x.dot(y).item()
         if isinstance(other, (ttb.ktensor, ttb.sptensor, ttb.ttensor)):
             # Reverse arguments and call specializer code
@@ -700,9 +837,8 @@ class tensor:
         sz = np.array(self.shape)
 
         if grps is None:
-            grps = np.arange(0, n)
-
-        if len(grps.shape) == 1:
+            grps = np.arange(0, n)[None, :]
+        elif len(grps.shape) == 1:
             grps = np.array([grps])
 
         # Substantially different routines are called depending on whether the user
@@ -782,7 +918,7 @@ class tensor:
         def logical_and(x, y):
             return np.logical_and(x, y).astype(dtype=x.dtype)
 
-        return tt_tenfun(logical_and, self, other)
+        return self.tenfun(logical_and, other)
 
     def logical_not(self) -> tensor:
         """
@@ -816,7 +952,7 @@ class tensor:
         def tensor_or(x, y):
             return np.logical_or(x, y).astype(x.dtype)
 
-        return tt_tenfun(tensor_or, self, other)
+        return self.tenfun(tensor_or, other)
 
     def logical_xor(self, other: Union[float, tensor]) -> tensor:
         """
@@ -837,7 +973,7 @@ class tensor:
         def tensor_xor(x, y):
             return np.logical_xor(x, y).astype(dtype=x.dtype)
 
-        return tt_tenfun(tensor_xor, self, other)
+        return self.tenfun(tensor_xor, other)
 
     def mask(self, W: tensor) -> np.ndarray:
         """
@@ -869,9 +1005,12 @@ class tensor:
         # Extract those non-zero values
         return self.data[tuple(wsubs.transpose())]
 
-    def mttkrp(self, U: Union[ttb.ktensor, List[np.ndarray]], n: int) -> np.ndarray:
-        """
-        Matricized tensor times Khatri-Rao product. The matrices used in the
+    def mttkrp(
+        self, U: Union[ttb.ktensor, Sequence[np.ndarray]], n: Union[int, np.integer]
+    ) -> np.ndarray:
+        """Matricized tensor times Khatri-Rao product.
+
+        The matrices used in the
         Khatri-Rao product are passed as a :class:`pyttb.ktensor` (where the
         factor matrices are used) or as a list of :class:`numpy.ndarray` objects.
 
@@ -894,7 +1033,6 @@ class tensor:
         array([[4., 4.],
                [4., 4.]])
         """
-
         # check that we have a tensor that can perform mttkrp
         if self.ndims < 2:
             assert False, "MTTKRP is invalid for tensors with fewer than 2 dimensions"
@@ -913,32 +1051,32 @@ class tensor:
             if U[i].shape[0] != self.shape[i]:
                 assert False, f"Entry {i} of list of arrays is wrong size"
 
-        szl = int(np.prod(self.shape[0:n]))
-        szr = int(np.prod(self.shape[n + 1 :]))
+        szl = prod(self.shape[0:n])
+        szr = prod(self.shape[n + 1 :])
         szn = self.shape[n]
 
         if n == 0:
             Ur = ttb.khatrirao(*U[1 : self.ndims], reverse=True)
-            Y = np.reshape(self.data, (szn, szr), order="F")
-            return Y @ Ur
+            Y = np.reshape(self.data, (szn, szr), order=self.order)
+            return to_memory_order(Y @ Ur, self.order)
         if n == self.ndims - 1:
             Ul = ttb.khatrirao(*U[0 : self.ndims - 1], reverse=True)
-            Y = np.reshape(self.data, (szl, szn), order="F")
-            return Y.T @ Ul
+            Y = np.reshape(self.data, (szl, szn), order=self.order)
+            return to_memory_order(Y.T @ Ul, self.order)
         else:
             Ul = ttb.khatrirao(*U[n + 1 :], reverse=True)
             Ur = np.reshape(
-                ttb.khatrirao(*U[0:n], reverse=True), (szl, 1, R), order="F"
+                ttb.khatrirao(*U[0:n], reverse=True), (szl, 1, R), order=self.order
             )
-            Y = np.reshape(self.data, (-1, szr), order="F")
+            Y = np.reshape(self.data, (-1, szr), order=self.order)
             Y = Y @ Ul
-            Y = np.reshape(Y, (szl, szn, R), order="F")
-            V = np.zeros((szn, R))
+            Y = np.reshape(Y, (szl, szn, R), order=self.order)
+            V = np.zeros((szn, R), order=self.order)
             for r in range(R):
                 V[:, [r]] = Y[:, :, r].T @ Ur[:, :, r]
-            return V
+            return to_memory_order(V, self.order)
 
-    def mttkrps(self, U: Union[ttb.ktensor, List[np.ndarray]]) -> List[np.ndarray]:
+    def mttkrps(self, U: Union[ttb.ktensor, Sequence[np.ndarray]]) -> List[np.ndarray]:
         """
         Sequence of MTTKRP calculations for a tensor.
 
@@ -968,14 +1106,14 @@ class tensor:
         split_idx = min_split(self.shape)
         V = [np.empty_like(self.data, shape=())] * self.ndims
         K = ttb.khatrirao(*U[split_idx + 1 :], reverse=True)
-        W = np.reshape(self.data, (-1, K.shape[0]), order="F").dot(K)
+        W = np.reshape(self.data, (-1, K.shape[0]), order=self.order).dot(K)
         for k in range(split_idx):
             # Loop entry invariant: W has modes (mk x ... x ms, C)
             V[k] = mttv_mid(W, U[k + 1 : split_idx + 1])
             W = mttv_left(W, U[k])
         V[split_idx] = W
         K = ttb.khatrirao(*U[0 : split_idx + 1], reverse=True)
-        W = np.reshape(self.data, (K.shape[0], -1), order="F").transpose().dot(K)
+        W = np.reshape(self.data, (K.shape[0], -1), order=self.order).transpose().dot(K)
         for k in range(split_idx + 1, self.ndims - 1):
             # Loop invariant: W has modes (mk x .. x md, C)
             V[k] = mttv_mid(W, U[k + 1 :])
@@ -1012,8 +1150,9 @@ class tensor:
         return np.count_nonzero(self.data)
 
     def norm(self) -> float:
-        """
-        Frobenius norm of the tensor, defined as the square root of the sum of the
+        """Frobenius norm of the tensor.
+
+        Defined as the square root of the sum of the
         squares of the elements of the tensor.
 
         Examples
@@ -1085,9 +1224,10 @@ class tensor:
                     v[:, i] *= -1
         return v
 
-    def permute(self, order: np.ndarray) -> tensor:
-        """
-        Permute tensor dimensions. The result is a tensor that has the
+    def permute(self, order: OneDArray) -> tensor:
+        """Permute tensor dimensions.
+
+        The result is a tensor that has the
         same values, but the order of the subscripts needed to access
         any particular element are rearranged as specified by `order`.
 
@@ -1104,16 +1244,17 @@ class tensor:
         --------
         >>> T1 = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1 2]
          [3 4]]
         >>> T1.permute(np.array((1, 0)))
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1 3]
          [2 4]]
         """
+        order = parse_one_d(order)
         if self.ndims != order.size:
             assert False, "Invalid permutation order"
 
@@ -1126,9 +1267,12 @@ class tensor:
             return self.copy()
 
         # Np transpose does error checking on order, acts as permutation
-        return ttb.tensor(np.transpose(self.data, order), copy=False)
 
-    def reshape(self, shape: Tuple[int, ...]) -> tensor:
+        return ttb.tensor(
+            to_memory_order(np.transpose(self.data, order), self.order), copy=False
+        )
+
+    def reshape(self, shape: Shape) -> tensor:
         """
         Reshape the tensor.
 
@@ -1146,10 +1290,11 @@ class tensor:
         >>> T2.shape
         (4, 1)
         """
-        if np.prod(self.shape) != np.prod(shape):
+        shape = parse_shape(shape)
+        if prod(self.shape) != prod(shape):
             assert False, "Reshaping a tensor cannot change number of elements"
 
-        return ttb.tensor(np.reshape(self.data, shape, order="F"), shape)
+        return ttb.tensor(self.data.reshape(shape, order=self.order), shape, copy=False)
 
     def scale(
         self,
@@ -1214,8 +1359,7 @@ class tensor:
         return ttb.tenmat(result, dims, remdims, self.shape, copy=False).to_tensor()
 
     def squeeze(self) -> Union[tensor, float]:
-        """
-        Removes singleton dimensions from the tensor.
+        """Remove singleton dimensions from the tensor.
 
         Returns
         -------
@@ -1236,7 +1380,9 @@ class tensor:
         else:
             idx = np.where(shapeArray > 1)
             if idx[0].size == 0:
-                return self.data.item()
+                # Why is item annotated as str?
+                single_item: float = cast(float, self.data.item())
+                return single_item
             return ttb.tensor(np.squeeze(self.data))
 
     def symmetrize(  # noqa: PLR0912,PLR0915
@@ -1263,11 +1409,11 @@ class tensor:
         --------
         >>> T = ttb.tenones((2, 2, 2))
         >>> T.symmetrize(np.array([0, 2]))
-        tensor of shape (2, 2, 2)
-        data[0, :, :] =
+        tensor of shape (2, 2, 2) with order F
+        data[:, :, 0] =
         [[1. 1.]
          [1. 1.]]
-        data[1, :, :] =
+        data[:, :, 1] =
         [[1. 1.]
          [1. 1.]]
         """
@@ -1324,9 +1470,9 @@ class tensor:
                     avg = classSum / classNum
 
                 newdata = avg[linclassidx]
-                data = np.reshape(newdata, self.shape)
+                data = np.reshape(newdata, self.shape, order=self.order)
 
-            return ttb.tensor(data, copy=False)
+            return ttb.tensor(to_memory_order(data, self.order), copy=False)
 
         else:  # Original version
             # Check tensor dimensions for compatibility with symmetrization
@@ -1347,11 +1493,10 @@ class tensor:
             combos = []
             for i in range(0, ngrps):
                 combos.append(np.array(list(permutations(grps[i, :]))))
-            combos = np.stack(combos)
 
-            # Create all the permuations to be averaged
+            # Create all the permutations to be averaged
             combo_lengths = [len(perm) for perm in combos]
-            total_perms = int(np.prod(combo_lengths))
+            total_perms = prod(combo_lengths)
             sym_perms = np.tile(np.arange(0, n), [total_perms, 1])
             for i in range(0, ngrps):
                 ntimes = np.prod(combo_lengths[0:i], dtype=int)
@@ -1386,9 +1531,9 @@ class tensor:
 
     def ttm(
         self,
-        matrix: Union[np.ndarray, List[np.ndarray]],
-        dims: Optional[Union[float, np.ndarray]] = None,
-        exclude_dims: Optional[Union[int, np.ndarray]] = None,
+        matrix: Union[np.ndarray, Sequence[np.ndarray]],
+        dims: Optional[OneDArray] = None,
+        exclude_dims: Optional[OneDArray] = None,
         transpose: bool = False,
     ) -> tensor:
         """
@@ -1429,32 +1574,22 @@ class tensor:
         >>> T = ttb.tenones((2, 2, 2, 2))
         >>> A = 2 * np.ones((2, 1))
         >>> T.ttm([A, A], dims=[0, 1], transpose=True)
-        tensor of shape (1, 1, 2, 2)
-        data[0, 0, :, :] =
+        tensor of shape (1, 1, 2, 2) with order F
+        data[:, :, 0, 0] =
+        [[16.]]
+        data[:, :, 1, 0] =
+        [[16.]]
+        data[:, :, 0, 1] =
+        [[16.]]
+        data[:, :, 1, 1] =
+        [[16.]]
+        >>> T.ttm([A, A], exclude_dims=[0, 1], transpose=True)
+        tensor of shape (2, 2, 1, 1) with order F
+        data[:, :, 0, 0] =
         [[16. 16.]
          [16. 16.]]
-        >>> T.ttm([A, A], exclude_dims=[0, 1], transpose=True)
-        tensor of shape (2, 2, 1, 1)
-        data[0, 0, :, :] =
-        [[16.]]
-        data[1, 0, :, :] =
-        [[16.]]
-        data[0, 1, :, :] =
-        [[16.]]
-        data[1, 1, :, :] =
-        [[16.]]
         """
-        if dims is None and exclude_dims is None:
-            dims = np.arange(self.ndims)
-        elif isinstance(dims, list):
-            dims = np.array(dims)
-        elif isinstance(dims, (float, int, np.generic)):
-            dims = np.array([dims])
-
-        if isinstance(exclude_dims, (float, int)):
-            exclude_dims = np.array([exclude_dims])
-
-        if isinstance(matrix, list):
+        if isinstance(matrix, Sequence):
             # Check that the dimensions are valid
             dims, vidx = tt_dimscheck(self.ndims, len(matrix), dims, exclude_dims)
 
@@ -1481,7 +1616,7 @@ class tensor:
         second_dim = 1
         if len(ids) > 0:
             second_dim = np.prod(shape[ids])
-        newdata = np.reshape(newdata, (shape[n], second_dim), order="F")
+        newdata = np.reshape(newdata, (shape[n], second_dim), order=self.order)
         if transpose:
             newdata = matrix.T @ newdata
             p = matrix.shape[1]
@@ -1492,9 +1627,9 @@ class tensor:
         newshape = np.array(
             [p, *list(shape[range(0, n)]), *list(shape[range(n + 1, self.ndims)])]
         )
-        Y_data = np.reshape(newdata, newshape, order="F")
+        Y_data: np.ndarray = np.reshape(newdata, newshape, order=self.order)
         Y_data = np.transpose(Y_data, np.argsort(order))
-        return ttb.tensor(Y_data, copy=False)
+        return ttb.tensor(Y_data, copy=True)
 
     def ttt(
         self,
@@ -1529,26 +1664,26 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T.ttt(T)
-        tensor of shape (2, 2, 2, 2)
-        data[0, 0, :, :] =
+        tensor of shape (2, 2, 2, 2) with order F
+        data[:, :, 0, 0] =
         [[1 2]
          [3 4]]
-        data[1, 0, :, :] =
+        data[:, :, 1, 0] =
         [[ 3  6]
          [ 9 12]]
-        data[0, 1, :, :] =
+        data[:, :, 0, 1] =
         [[2 4]
          [6 8]]
-        data[1, 1, :, :] =
+        data[:, :, 1, 1] =
         [[ 4  8]
          [12 16]]
         >>> T.ttt(T, 0)
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[10 14]
          [14 20]]
         >>> T.ttt(T, selfdims=0, otherdims=1)
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ 7 15]
          [10 22]]
@@ -1587,9 +1722,9 @@ class tensor:
 
     def ttv(
         self,
-        vector: Union[np.ndarray, List[np.ndarray]],
-        dims: Optional[Union[int, np.ndarray]] = None,
-        exclude_dims: Optional[Union[int, np.ndarray]] = None,
+        vector: Union[np.ndarray, Sequence[np.ndarray]],
+        dims: Optional[OneDArray] = None,
+        exclude_dims: Optional[OneDArray] = None,
     ) -> Union[float, tensor]:
         """
         Tensor times vector.
@@ -1612,7 +1747,7 @@ class tensor:
         Parameters
         ----------
         vector:
-            Vector or vectors to multiple by.
+            Vector or vectors to multiply by.
         dims:
             Dimensions to multiply against.
         exclude_dims:
@@ -1626,24 +1761,16 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T.ttv(np.ones(2), 0)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [4. 6.]
         >>> T.ttv(np.ones(2), 1)
-        tensor of shape (2,)
+        tensor of shape (2,) with order F
         data[:] =
         [3. 7.]
         >>> T.ttv([np.ones(2), np.ones(2)])
         10.0
         """
-        if dims is None and exclude_dims is None:
-            dims = np.array([])
-        elif isinstance(dims, (float, int)):
-            dims = np.array([dims])
-
-        if isinstance(exclude_dims, (float, int)):
-            exclude_dims = np.array([exclude_dims])
-
         # Check that vector is a list of vectors, if not place single vector as element
         # in list
         if len(vector) > 0 and isinstance(vector[0], (int, float, np.int_, np.float64)):
@@ -1671,7 +1798,9 @@ class tensor:
         sz = np.array(self.shape)[np.concatenate((remdims, dims))]
 
         for i in range(dims.size - 1, -1, -1):
-            c = np.reshape(c, tuple([np.prod(sz[0 : n - 1]), sz[n - 1]]), order="F")
+            c = np.reshape(
+                c, tuple([np.prod(sz[0 : n - 1]), sz[n - 1]]), order=self.order
+            )
             c = c.dot(vector[vidx[i]])
             n -= 1
         # If needed, convert the final result back to tensor
@@ -1681,7 +1810,7 @@ class tensor:
 
     def ttsv(
         self,
-        vector: np.ndarray,
+        vector: OneDArray,
         skip_dim: Optional[int] = None,
         version: Optional[int] = None,
     ) -> Union[float, np.ndarray, tensor]:
@@ -1710,6 +1839,7 @@ class tensor:
         array([[1, 2],
                [3, 4]])
         """
+        vector = parse_one_d(vector)
         # Only two simple cases are supported
         if skip_dim is None:
             exclude_dims = None
@@ -1737,24 +1867,196 @@ class tensor:
 
             y = self.data.copy()
             for i in range(drem, 0, -1):
-                yy = np.reshape(y, (sz ** (dnew + i - 1), sz), order="F")
+                yy = np.reshape(y, (sz ** (dnew + i - 1), sz), order=self.order)
                 y = yy.dot(vector)
 
             # Convert to matrix if 2-way or convert back to tensor if result is >= 3-way
             if dnew == 2:
-                return np.reshape(y, [sz, sz], order="F")
+                return np.reshape(y, [sz, sz], order=self.order)
             if dnew > 2:
                 return ttb.tensor(
-                    np.reshape(y, newshape=sz * np.ones(dnew, dtype=int), order="F"),
+                    np.reshape(
+                        y, newshape=sz * np.ones(dnew, dtype=int), order=self.order
+                    ),
                     copy=False,
                 )
 
             # extract scalar if needed
             if len(y) == 1:
-                y = y.item()
+                return cast(float, y.item())
 
             return y
         assert False, "Invalid value for version; should be None, 1, or 2"
+
+    def tenfun(
+        self,
+        function_handle: Union[
+            Callable[[np.ndarray, np.ndarray], np.ndarray],
+            Callable[[np.ndarray], np.ndarray],
+        ],
+        *inputs: Union[
+            float,
+            int,
+            np.ndarray,
+            ttb.tensor,
+            ttb.ktensor,
+            ttb.ttensor,
+            ttb.sptensor,
+            ttb.sumtensor,
+        ],
+    ) -> ttb.tensor:
+        """Apply a function to each element in a tensor or tensors.
+
+        See :meth:`pyttb.tensor.tenfun_binary` and
+        :meth:`pyttb.tensor.tenfun_binary_unary` for supported
+        options.
+        """
+        assert callable(function_handle), "function_handle must be callable"
+
+        # Number of inputs for function handle
+        nfunin = len(signature(function_handle).parameters)
+
+        # Case I: Binary function
+        if len(inputs) == 1 and nfunin == 2:
+            # We manually inspected the function handle for the parameters
+            # maybe there is a more clever way to convince mypy
+            binary_function_handle = cast(
+                Callable[[np.ndarray, np.ndarray], np.ndarray], function_handle
+            )
+            Y = inputs[0]
+            if not isinstance(Y, (int, float)):
+                Y = self._tt_to_tensor(Y)
+            return self.tenfun_binary(binary_function_handle, Y)
+
+        # Convert inputs to tensors if they aren't already
+        # Allow inputs to be mutable in case of type conversion
+        input_tensors: list[Union[ttb.tensor]] = []
+        for an_input in inputs:
+            if not isinstance(
+                an_input,
+                (
+                    np.ndarray,
+                    ttb.tensor,
+                    ttb.ktensor,
+                    ttb.ttensor,
+                    ttb.sptensor,
+                    ttb.sumtensor,
+                ),
+            ):
+                assert (
+                    False
+                ), f"Invalid input to ten fun: {an_input} of type {type(an_input)}"
+            input_tensors.append(self._tt_to_tensor(an_input))
+
+        # Case II: Expects input to be matrix and applies operation on each columns
+        if nfunin != 1:
+            raise ValueError(
+                "Tenfun only supports binary and unary function handles but provided "
+                "function handle takes {nfunin} arguments."
+            )
+        unary_function_handle = cast(
+            Callable[[np.ndarray], np.ndarray], function_handle
+        )
+        return self.tenfun_unary(unary_function_handle, *input_tensors)
+
+    def tenfun_binary(
+        self,
+        function_handle: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        other: Union[ttb.tensor, int, float],
+        first: bool = True,
+    ) -> ttb.tensor:
+        """Apply a binary operation to two tensors or a tensor and a scalar.
+
+        Parameters
+        ----------
+        function_handle: Function to apply.
+        other: Other input to the binary function.
+        first: Whether the tensor comes first in the method call (if ordering matters).
+
+        Example
+        -------
+        >>> add = lambda x, y: x + y
+        >>> t0 = ttb.tenones((2, 2))
+        >>> t1 = t0.tenfun_binary(add, t0)
+        >>> t1.isequal(t0 * 2)
+        True
+        >>> t2 = t0.tenfun_binary(add, 1)
+        >>> t2.isequal(t1)
+        True
+        """
+        X = self.data
+        if not isinstance(other, (float, int)):
+            Y = other.data
+        else:
+            Y = np.array(other, order=self.order)
+
+        if not first:
+            Y, X = X, Y
+        data = function_handle(X, Y)
+        copy = False
+        if not self._matches_order(data):
+            copy = True
+            logging.warning(
+                f"Tenfun function expects data of order {self.order}."
+                f" Update function to return data or the order to avoid "
+                "extra data copy."
+            )
+        Z = ttb.tensor(data, copy=copy)
+        return Z
+
+    def tenfun_unary(
+        self, function_handle: Callable[[np.ndarray], np.ndarray], *inputs: ttb.tensor
+    ) -> ttb.tensor:
+        """Apply a unary operation to multiple tensors columnwise.
+
+        Example
+        -------
+        >>> tensor_max = lambda x: np.max(x, axis=0)
+        >>> data = np.array([[1, 2, 3], [4, 5, 6]])
+        >>> t0 = ttb.tensor(data)
+        >>> t1 = ttb.tensor(data)
+        >>> t2 = t0.tenfun_unary(tensor_max, t1)
+        >>> t2.isequal(t1)
+        True
+        """
+        sz = self.shape
+        for i, an_input in enumerate(inputs):
+            if isinstance(an_input, (float, int)):
+                assert False, f"Argument {i} is a scalar but expected a tensor"
+            elif sz != an_input.shape:
+                assert (
+                    False
+                ), f"Tensor {i} is not the same size as the first tensor input"
+        if len(inputs) == 0:
+            X = self.data
+            X = np.reshape(X, (1, -1), order=self.order)
+        else:
+            X = np.zeros((len(inputs) + 1, np.prod(sz)), order=self.order)
+            X[0, :] = np.reshape(self.data, (np.prod(sz)), order=self.order)
+            for i, an_input in enumerate(inputs):
+                X[i + 1, :] = np.reshape(an_input.data, (np.prod(sz)), order=self.order)
+        data = function_handle(X)
+        data = np.reshape(data, sz, order=self.order)
+        Z = ttb.tensor(data, copy=False)
+        return Z
+
+    def _tt_to_tensor(
+        self,
+        some_tensor: Union[
+            np.ndarray,
+            ttb.tensor,
+            ttb.ktensor,
+            ttb.ttensor,
+            ttb.sptensor,
+            ttb.sumtensor,
+        ],
+    ) -> ttb.tensor:
+        """Convert a variety of data structures to a dense tensor."""
+        if isinstance(some_tensor, np.ndarray):
+            return ttb.tensor(some_tensor)
+        elif isinstance(some_tensor, ttb.tensor):
+            return some_tensor
+        return some_tensor.to_tensor()
 
     def __setitem__(self, key, value):
         """
@@ -1814,7 +2116,7 @@ class tensor:
         if isinstance(key, (int, float, np.generic)):
             idx = np.array([key])
         elif isinstance(key, slice):
-            idx = np.array(range(np.prod(self.shape))[key])
+            idx = np.array(range(prod(self.shape))[key])
         idx = tt_ind2sub(self.shape, idx)
         if idx.shape[0] == 1:
             self.data[tuple(idx[0, :])] = value
@@ -1839,7 +2141,7 @@ class tensor:
                     not isinstance(entry, (float, int, np.generic)) for entry in element
                 ):
                     raise ValueError(
-                        f"Entries for setitem must be numeric but recieved, {element}"
+                        f"Entries for setitem must be numeric but received, {element}"
                     )
                 sliceCheck.append(max(element))
             else:
@@ -1926,18 +2228,15 @@ class tensor:
         1.0
         >>> # produces a tensor of order 1 and size 1
         >>> T[1, 1, 1, :]  # doctest: +NORMALIZE_WHITESPACE
-        tensor of shape (1,)
+        tensor of shape (1,) with order F
         data[:] =
         [1.]
         >>> # produces a tensor of size 2 x 2 x 1
         >>> T[0:2, [2, 3], 1, :]  # doctest: +NORMALIZE_WHITESPACE
-        tensor of shape (2, 2, 1)
-        data[0, :, :] =
-        [[1.]
-         [1.]]
-        data[1, :, :] =
-        [[1.]
-         [1.]]
+        tensor of shape (2, 2, 1) with order F
+        data[:, :, 0] =
+        [[1. 1.]
+         [1. 1.]]
         >>> # returns a vector of length 2
         >>> # Equivalent to selecting [0,0,0,0] and [1,1,1,0] separately
         >>> T[np.array([[0, 0, 0, 0], [1, 1, 1, 0]])]
@@ -1950,7 +2249,7 @@ class tensor:
             if isinstance(item, (int, float, np.generic)):
                 idx = np.array(item)
             elif isinstance(item, slice):
-                idx = np.array(range(np.prod(self.shape))[item])
+                idx = np.array(range(prod(self.shape))[item])
             a = np.squeeze(self.data[tuple(tt_ind2sub(self.shape, idx).transpose())])
             # Todo if row make column?
             return tt_subsubsref(a, idx)
@@ -1987,7 +2286,8 @@ class tensor:
             if newsiz.size == 0:
                 a = newdata.item()
             else:
-                a = ttb.tensor(newdata, copy=False)
+                # Copy data to ensure correct data ordering
+                a = ttb.tensor(newdata, copy=True)
             return a
 
         # *** CASE 2a: Subscript indexing ***
@@ -2034,12 +2334,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T == T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True  True]
          [ True  True]]
         >>> T == 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True False]
          [False False]]
@@ -2048,7 +2348,7 @@ class tensor:
         def tensor_equality(x, y):
             return x == y
 
-        return tt_tenfun(tensor_equality, self, other)
+        return self.tenfun(tensor_equality, other)
 
     def __ne__(self, other):
         """
@@ -2066,12 +2366,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T != T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False False]
          [False False]]
         >>> T != 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False  True]
          [ True  True]]
@@ -2080,7 +2380,7 @@ class tensor:
         def tensor_not_equal(x, y):
             return x != y
 
-        return tt_tenfun(tensor_not_equal, self, other)
+        return self.tenfun(tensor_not_equal, other)
 
     def __ge__(self, other):
         """
@@ -2098,12 +2398,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T >= T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True  True]
          [ True  True]]
         >>> T >= 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True  True]
          [ True  True]]
@@ -2112,7 +2412,7 @@ class tensor:
         def greater_or_equal(x, y):
             return x >= y
 
-        return tt_tenfun(greater_or_equal, self, other)
+        return self.tenfun(greater_or_equal, other)
 
     def __le__(self, other):
         """
@@ -2130,12 +2430,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T <= T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True  True]
          [ True  True]]
         >>> T <= 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ True False]
          [False False]]
@@ -2144,7 +2444,7 @@ class tensor:
         def less_or_equal(x, y):
             return x <= y
 
-        return tt_tenfun(less_or_equal, self, other)
+        return self.tenfun(less_or_equal, other)
 
     def __gt__(self, other):
         """
@@ -2162,12 +2462,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T > T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False False]
          [False False]]
         >>> T > 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False  True]
          [ True  True]]
@@ -2176,7 +2476,7 @@ class tensor:
         def greater(x, y):
             return x > y
 
-        return tt_tenfun(greater, self, other)
+        return self.tenfun(greater, other)
 
     def __lt__(self, other):
         """
@@ -2194,12 +2494,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T < T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False False]
          [False False]]
         >>> T < 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[False False]
          [False False]]
@@ -2208,7 +2508,7 @@ class tensor:
         def less(x, y):
             return x < y
 
-        return tt_tenfun(less, self, other)
+        return self.tenfun(less, other)
 
     def __sub__(self, other):
         """
@@ -2226,12 +2526,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T - T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[0 0]
          [0 0]]
         >>> T - 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[0 1]
          [2 3]]
@@ -2240,7 +2540,7 @@ class tensor:
         def minus(x, y):
             return x - y
 
-        return tt_tenfun(minus, self, other)
+        return self.tenfun(minus, other)
 
     def __add__(self, other):
         """
@@ -2258,12 +2558,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T + T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2 4]
          [6 8]]
         >>> T + 1
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2 3]
          [4 5]]
@@ -2275,11 +2575,10 @@ class tensor:
         def tensor_add(x, y):
             return x + y
 
-        return tt_tenfun(tensor_add, self, other)
+        return self.tenfun(tensor_add, other)
 
     def __radd__(self, other):
-        """
-        Right binary addition (+) for tensors
+        """Right binary addition (+) for tensors.
 
         Parameters
         ----------
@@ -2293,7 +2592,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> 1 + T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2 3]
          [4 5]]
@@ -2316,7 +2615,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T**2
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ 1  4]
          [ 9 16]]
@@ -2325,11 +2624,10 @@ class tensor:
         def tensor_pow(x, y):
             return x**y
 
-        return tt_tenfun(tensor_pow, self, power)
+        return self.tenfun(tensor_pow, power)
 
     def __mul__(self, other):
-        """
-        Element-wise multiplication (*) for tensors, self*other
+        """Element-wise multiplication (*) for tensors, self*other.
 
         Parameters
         ----------
@@ -2343,12 +2641,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T * T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[ 1  4]
          [ 9 16]]
         >>> T * 2
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2 4]
          [6 8]]
@@ -2360,11 +2658,10 @@ class tensor:
         if isinstance(other, (ttb.ktensor, ttb.sptensor, ttb.ttensor)):
             other = other.full()
 
-        return tt_tenfun(mul, self, other)
+        return self.tenfun(mul, other)
 
     def __rmul__(self, other):
-        """
-        Element wise right multiplication (*) for tensors, other*self
+        """Element wise right multiplication (*) for tensors, other*self.
 
         Parameters
         ----------
@@ -2378,7 +2675,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> 2 * T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2 4]
          [6 8]]
@@ -2386,8 +2683,7 @@ class tensor:
         return self.__mul__(other)
 
     def __truediv__(self, other):
-        """
-        Element-wise left division (/) for tensors, self/other
+        """Element-wise left division (/) for tensors, self/other.
 
         Parameters
         ----------
@@ -2401,12 +2697,12 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T / T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1. 1.]
          [1. 1.]]
         >>> T / 2
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[0.5 1. ]
          [1.5 2. ]]
@@ -2418,11 +2714,10 @@ class tensor:
             with np.errstate(divide="ignore", invalid="ignore"):
                 return x / y
 
-        return tt_tenfun(div, self, other)
+        return self.tenfun(div, other)
 
     def __rtruediv__(self, other):
-        """
-        Element wise right division (/) for tensors, other/self
+        """Element wise right division (/) for tensors, other/self.
 
         Parameters
         ----------
@@ -2437,7 +2732,7 @@ class tensor:
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> np.set_printoptions(precision=8)
         >>> 2 / T  # doctest: +ELLIPSIS
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[2.         1.        ]
          [0.66666... 0.5       ]]
@@ -2449,7 +2744,7 @@ class tensor:
             with np.errstate(divide="ignore", invalid="ignore"):
                 return x / y
 
-        return tt_tenfun(div, other, self)
+        return self.tenfun_binary(div, other, first=False)
 
     def __pos__(self):
         """
@@ -2463,7 +2758,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> +T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1 2]
          [3 4]]
@@ -2482,17 +2777,15 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> -T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[-1 -2]
          [-3 -4]]
         """
-
         return ttb.tensor(-1 * self.data)
 
     def __repr__(self):
-        """
-        String representation of the tensor.
+        """Return string representation of the tensor.
 
         Returns
         -------
@@ -2502,7 +2795,7 @@ class tensor:
         --------
         >>> T = ttb.tensor(np.array([[1, 2], [3, 4]]))
         >>> T
-        tensor of shape (2, 2)
+        tensor of shape (2, 2) with order F
         data[:, :] =
         [[1 2]
          [3 4]]
@@ -2515,7 +2808,7 @@ class tensor:
             return s
 
         s = ""
-        s += f"tensor of shape {np_to_python(self.shape)}"
+        s += f"tensor of shape {np_to_python(self.shape)} with order {self.order}"
 
         if self.ndims == 1:
             s += "\ndata"
@@ -2524,22 +2817,22 @@ class tensor:
                 s += " =\n"
                 s += str(self.data)
                 return s
-        for i in np.arange(np.prod(self.shape[:-2])):
+        for i in np.arange(np.prod(self.shape[2:])):
             s += "\ndata"
             if self.ndims == 2:
                 s += "[:, :]"
                 s += " =\n"
                 s += str(self.data)
             elif self.ndims > 2:
-                idx = tt_ind2sub(self.shape[:-2], np.array([i]))
-                s += str(idx[0].tolist())[0:-1]
-                s += ", :, :]"
+                idx = tt_ind2sub(self.shape[2:], np.array([i]))
+                s += "[:, :, "
+                s += str(idx[0].tolist())[1:]
                 s += " =\n"
                 s += str(
                     self.data[
                         tuple(
                             np.concatenate(
-                                (idx[0], np.array([slice(None), slice(None)]))
+                                (np.array([slice(None), slice(None)]), idx[0])
                             )
                         )
                     ]
@@ -2549,15 +2842,33 @@ class tensor:
 
     __str__ = __repr__
 
+    def _matlab_str(
+        self, format: Optional[str] = None, name: Optional[str] = None
+    ) -> str:
+        """Non-standard representation to be more similar to MATLAB."""
+        header = name
+        if name is None:
+            name = "data"
+        if header is None:
+            header = "This"
 
-def tenones(shape: Tuple[int, ...]) -> tensor:
-    """
-    Creates a tensor of all ones.
+        matlab_str = f"{header} is a tensor of shape " + " x ".join(
+            map(str, self.shape)
+        )
+
+        array_str = _matlab_array_str(self.data, format, name)
+        return matlab_str + "\n" + textwrap.indent(array_str, "\t")
+
+
+def tenones(shape: Shape, order: MemoryLayout = "F") -> tensor:
+    """Create a tensor of all ones.
 
     Parameters
     ----------
     shape:
         Shape of resulting tensor.
+    order:
+        Memory layout for resulting tensor.
 
     Returns
     -------
@@ -2567,28 +2878,33 @@ def tenones(shape: Tuple[int, ...]) -> tensor:
     --------
     >>> T = ttb.tenones((3,))
     >>> T
-    tensor of shape (3,)
+    tensor of shape (3,) with order F
     data[:] =
     [1. 1. 1.]
     >>> T = ttb.tenones((3, 3))
     >>> T
-    tensor of shape (3, 3)
+    tensor of shape (3, 3) with order F
     data[:, :] =
     [[1. 1. 1.]
      [1. 1. 1.]
      [1. 1. 1.]]
     """
-    return tensor.from_function(np.ones, shape)
+
+    def ones(shape: Tuple[int, ...]) -> np.ndarray:
+        return np.ones(shape, order=order)
+
+    return tensor.from_function(ones, shape)
 
 
-def tenzeros(shape: Tuple[int, ...]) -> tensor:
-    """
-    Creates a tensor of all zeros.
+def tenzeros(shape: Shape, order: MemoryLayout = "F") -> tensor:
+    """Create a tensor of all zeros.
 
     Parameters
     ----------
     shape:
         Shape of resulting tensor.
+    order:
+        Memory layout for resulting tensor.
 
     Returns
     -------
@@ -2598,29 +2914,33 @@ def tenzeros(shape: Tuple[int, ...]) -> tensor:
     --------
     >>> T = ttb.tenzeros((3,))
     >>> T
-    tensor of shape (3,)
+    tensor of shape (3,) with order F
     data[:] =
     [0. 0. 0.]
     >>> T = ttb.tenzeros((3, 3))
     >>> T
-    tensor of shape (3, 3)
+    tensor of shape (3, 3) with order F
     data[:, :] =
     [[0. 0. 0.]
      [0. 0. 0.]
      [0. 0. 0.]]
     """
-    return tensor.from_function(np.zeros, shape)
+
+    def zeros(shape: Tuple[int, ...]) -> np.ndarray:
+        return np.zeros(shape, order=order)
+
+    return tensor.from_function(zeros, shape)
 
 
-def tenrand(shape: Tuple[int, ...]) -> tensor:
-    """
-    Creates a tensor with entries drawn from a uniform
-    distribution on the unit interval.
+def tenrand(shape: Shape, order: MemoryLayout = "F") -> tensor:
+    """Create a tensor with entries drawn from a uniform distribution on [0, 1].
 
     Parameters
     ----------
     shape:
         Shape of resulting tensor.
+    order:
+        Memory layout for resulting tensor.
 
     Returns
     -------
@@ -2630,8 +2950,8 @@ def tenrand(shape: Tuple[int, ...]) -> tensor:
     --------
     >>> np.random.seed(1)
     >>> T = ttb.tenrand((3,))
-    >>> T
-    tensor of shape (3,)
+    >>> T  # doctest: +ELLIPSIS
+    tensor of shape (3,) with order F
     data[:] =
     [4.170...e-01 7.203...e-01 1.143...e-04]
     """
@@ -2639,15 +2959,20 @@ def tenrand(shape: Tuple[int, ...]) -> tensor:
     # Typing doesn't play nice with partial
     # mypy issue: 1484
     def unit_uniform(pass_through_shape: Tuple[int, ...]) -> np.ndarray:
-        return np.random.uniform(low=0, high=1, size=pass_through_shape)
+        data = np.random.uniform(low=0, high=1, size=np.prod(pass_through_shape))
+        return data
 
     return tensor.from_function(unit_uniform, shape)
 
 
-def tendiag(elements: np.ndarray, shape: Optional[Tuple[int, ...]] = None) -> tensor:
-    """
-    Creates a tensor with elements along super diagonal. If provided shape is too
-    small the tensor will be enlarged to accomodate.
+def tendiag(
+    elements: OneDArray,
+    shape: Optional[Shape] = None,
+    order: MemoryLayout = "F",
+) -> tensor:
+    """Create a tensor with elements along super diagonal.
+
+    If provided shape is too small the tensor will be enlarged to accommodate.
 
     Parameters
     ----------
@@ -2655,6 +2980,8 @@ def tendiag(elements: np.ndarray, shape: Optional[Tuple[int, ...]] = None) -> te
         Elements to set along the diagonal.
     shape:
         Shape of resulting tensor.
+    order:
+        Memory layout for resulting tensor.
 
     Returns
     -------
@@ -2670,19 +2997,20 @@ def tendiag(elements: np.ndarray, shape: Optional[Tuple[int, ...]] = None) -> te
     True
     """
     # Flatten provided elements
-    elements = np.ravel(elements)
+    elements = parse_one_d(elements)
     N = len(elements)
     if shape is None:
         constructed_shape = (N,) * N
     else:
+        shape = parse_shape(shape)
         constructed_shape = tuple(max(N, dim) for dim in shape)
-    X = tenzeros(constructed_shape)
+    X = tenzeros(constructed_shape, order=order)
     subs = np.tile(np.arange(0, N)[:, None], (len(constructed_shape),))
     X[subs] = elements
     return X
 
 
-def teneye(order: int, size: int) -> tensor:
+def teneye(ndims: int, size: int, order: MemoryLayout = "F") -> tensor:
     """Create identity tensor of specified shape.
 
     T is an "identity tensor if T.ttsv(x, skip_dim=0) = x for all x such that
@@ -2694,13 +3022,15 @@ def teneye(order: int, size: int) -> tensor:
 
     Parameters
     ----------
-    order: Number of dimensions of tensor.
+    ndims: Number of dimensions of tensor.
     size: Number of elements in any dimension of the tensor.
+    order:
+        Memory layout for resulting tensor.
 
     Examples
     --------
     >>> ttb.teneye(2, 3)
-    tensor of shape (3, 3)
+    tensor of shape (3, 3) with order F
     data[:, :] =
     [[1. 0. 0.]
      [0. 1. 0.]
@@ -2715,23 +3045,23 @@ def teneye(order: int, size: int) -> tensor:
     -------
     Identity tensor.
     """
-    if order % 2 != 0:
-        raise ValueError(f"Order must be even but received {order}")
-    idx_iterator = combinations_with_replacement(range(size), order)
-    A = tenzeros((size,) * order)
-    s = np.zeros((factorial(order), order // 2))
+    if ndims % 2 != 0:
+        raise ValueError(f"Order must be even but received {ndims}")
+    idx_iterator = combinations_with_replacement(range(size), ndims)
+    A = tenzeros((size,) * ndims, order=order)
+    s = np.zeros((factorial(ndims), ndims // 2), order=order)
     for _i, indices in enumerate(idx_iterator):
         p = np.array(list(permutations(indices)))
-        for j in range(order // 2):
+        for j in range(ndims // 2):
             s[:, j] = p[:, 2 * j - 1] == p[:, 2 * j]
-        v = np.sum(np.sum(s, axis=1) == order // 2)
-        A[tuple(zip(*p))] = v / factorial(order)
+        v = np.sum(np.sum(s, axis=1) == ndims // 2)
+        A[tuple(zip(*p))] = v / factorial(ndims)
     return A
 
 
 def mttv_left(W_in: np.ndarray, U1: np.ndarray) -> np.ndarray:
-    """
-    Contract leading mode in partial MTTKRP W_in using factor matrix U1.
+    """Contract leading mode in partial MTTKRP W_in using factor matrix U1.
+
     The leading mode is the mode for which consecutive increases in index address
     elements at consecutive increases in the memory offset.
 
@@ -2758,7 +3088,7 @@ def mttv_left(W_in: np.ndarray, U1: np.ndarray) -> np.ndarray:
     return W_out
 
 
-def mttv_mid(W_in: np.ndarray, U_mid: List[np.ndarray]) -> np.ndarray:
+def mttv_mid(W_in: np.ndarray, U_mid: Sequence[np.ndarray]) -> np.ndarray:
     """
     Contract intermediate modes in partial MTTKRP W_in using factor matrices U_mid.
 
@@ -2785,7 +3115,7 @@ def mttv_mid(W_in: np.ndarray, U_mid: List[np.ndarray]) -> np.ndarray:
     return V
 
 
-def min_split(shape: Tuple[int, ...]) -> int:
+def min_split(shape: Shape) -> int:
     """Scan for optimal splitting with minimal memory footprint.
 
     Parameters
@@ -2799,8 +3129,9 @@ def min_split(shape: Tuple[int, ...]) -> int:
         Modes 0:split will contract in left-partial computation and the
         rest will contract in right-partial.
     """
+    shape = parse_shape(shape)
     m_left = shape[0]
-    m_right = np.prod(shape[1:])
+    m_right = prod(shape[1:])
     idx_min = 0
 
     # Minimize m_left + m_right

@@ -1,4 +1,4 @@
-"""Optimizer Implementations for CP OPT"""
+"""Optimizer Implementations for CP OPT."""
 
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
@@ -18,6 +18,7 @@ from pyttb.opt.fg_setup import function_type, gradient_type
 def evaluate(
     model, data, function_handle, gradient_handle
 ) -> Tuple[float, List[np.ndarray]]:
+    """Evaluate an objective function and/or gradient function."""
     F = function_handle(model, data)
     G = gradient_handle(model, data)
     return F, G
@@ -25,7 +26,7 @@ def evaluate(
 
 # If we use more scipy optimizers in the future we should generalize this
 class LBFGSB(LBFGSB_Base):
-    """Simple wrapper around scipy lbfgsb
+    """Simple wrapper around scipy lbfgsb.
 
     NOTE: If used for publications please see scipy documentation for adding citation
     for the implementation.
@@ -58,8 +59,7 @@ class LBFGSB(LBFGSB_Base):
         gradient_handle: gradient_type,
         lower_bound: float = -np.inf,
     ) -> Tuple[ttb.ktensor, Dict]:
-        """Solves the defined optimization problem"""
-
+        """Solves the defined optimization problem."""
         model = initial_model.copy()
 
         lbfgsb_func_grad = self._get_lbfgsb_func_grad(

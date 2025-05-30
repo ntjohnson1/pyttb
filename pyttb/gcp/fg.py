@@ -1,6 +1,6 @@
-"""Evaluate Function And Gradient Handles"""
+"""Evaluate Function And Gradient Handles."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
@@ -51,7 +51,7 @@ def evaluate(
     function_handle: Optional[function_type] = None,
     gradient_handle: Optional[function_type] = None,
 ) -> Union[float, List[np.ndarray], Tuple[float, List[np.ndarray]]]:
-    """Evaluate an objective function and/or gradient function
+    """Evaluate an objective function and/or gradient function.
 
     Parameters
     ----------
