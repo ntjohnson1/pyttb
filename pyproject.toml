@@ -50,6 +50,7 @@ doc = [
 profiling = [
     "gprof2dot",
     "graphviz",
+    "memory-profiler"
 ]
 
 [tool.setuptools.packages.find]
@@ -98,6 +99,7 @@ convention = "numpy"
 # Ignore everything for now
 "docs/**.py" = ["E", "F", "PL", "W", "N", "NPY", "RUF", "B", "D"]
 "docs/**.ipynb" = ["E", "F", "PL", "W", "N", "NPY", "RUF", "B", "D"]
+"profiling/**.py" = ["E", "F", "PL", "W", "N", "NPY", "RUF", "B", "D"]
 "profiling/**.ipynb" = ["E", "F", "PL", "W", "N", "NPY", "RUF", "B", "D"]
 
 [tool.ruff.format]
