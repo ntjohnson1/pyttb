@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import warnings
 from enum import Enum
 from typing import Any, TextIO
 
@@ -126,7 +127,7 @@ def _prepare_sptensor_data(data: ttb.sptensor, index_base: int = 1) -> dict[str,
     return {
         "header": _create_header("sptensor"),
         "shape": np.array(data.shape),
-        "nnz": np.array([data.nnz]),
+        "nnz_array": np.array([data.nnz]),
         "subs": data.subs + index_base,
         "vals": data.vals,
     }
@@ -142,9 +143,14 @@ def _prepare_tensor_data(data: ttb.tensor) -> dict[str, Any]:
 
 def _prepare_matrix_data(data: np.ndarray) -> dict[str, Any]:
     """Prepare matrix data for export."""
+    if not np.isfortran(data):
+        warnings.warn(
+            "Exporting a non-Fortran ordered array. "
+            "For now we only support Fortran order so reshaping."
+        )
     return {
         "header": _create_header("matrix"),
-        "data": data,
+        "data": np.asfortranarray(data),
     }
 
 

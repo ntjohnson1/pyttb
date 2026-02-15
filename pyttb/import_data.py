@@ -109,7 +109,7 @@ def import_data_mat(
     """Import tensor-related data from a MATLAB file."""
 
     def load_mat_data(filename: str):
-        mat_data = loadmat(filename)
+        mat_data = loadmat(filename, mat_dtype=True)
         header = mat_data["header"][0]
 
         num_factor_matrices = None
@@ -162,6 +162,7 @@ def _import_tensor_data(
 
     loaded_data = data_loader(filename)
     data_type = loaded_data["header"]
+    # TODO probably add future looking check here around format?
 
     if data_type not in ["tensor", "sptensor", "matrix", "ktensor"]:
         raise ValueError(f"Invalid data type found: '{data_type}'")
@@ -180,6 +181,8 @@ def _import_tensor_data(
     elif data_type == "ktensor":
         factor_matrices = loaded_data["factor_matrices"]
         weights = loaded_data["weights"]
+        print(factor_matrices)
+        print(weights)
         return ttb.ktensor(factor_matrices, weights)
 
     raise ValueError(f"Invalid data type found: {data_type}")
