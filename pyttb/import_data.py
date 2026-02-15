@@ -111,20 +111,26 @@ def import_data_mat(
     def load_mat_data(filename: str):
         mat_data = loadmat(filename)
         header = mat_data["header"][0]
+
+        num_factor_matrices = None
+        if "num_factor_matrices" in mat_data:
+            if np.prod(mat_data["num_factor_matrices"].shape) != 1:
+                raise ValueError(
+                    "Expected 'num_factor_matrices' to be a single value."
+                    f" But found {mat_data['num_factor_matrices']}."
+                )
+            num_factor_matrices = int(mat_data["num_factor_matrices"].ravel()[0])
         return {
             "header": header.split()[0],
             "data": mat_data.get("data"),
             "shape": tuple(mat_data["shape"][0]) if "shape" in mat_data else None,
             "subs": mat_data.get("subs"),
             "vals": mat_data.get("vals"),
-            "num_factor_matrices": int(mat_data["num_factor_matrices"])
-            if "num_factor_matrices" in mat_data
-            else None,
+            "num_factor_matrices": num_factor_matrices,
             "factor_matrices": [
-                mat_data[f"factor_matrix_{i}"]
-                for i in range(int(mat_data["num_factor_matrices"]))
+                mat_data[f"factor_matrix_{i}"] for i in range(num_factor_matrices)
             ]
-            if "num_factor_matrices" in mat_data
+            if num_factor_matrices is not None
             else None,
             "weights": mat_data.get("weights").flatten()
             if "weights" in mat_data
