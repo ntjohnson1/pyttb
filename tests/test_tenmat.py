@@ -1,6 +1,7 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import logging
 from copy import deepcopy
@@ -315,6 +316,11 @@ def test_tenmat_double(sample_tenmat_4way):
     assert (double_array == tenmatInstance.data.astype(np.float64)).all()
     assert_consistent_order(tenmatInstance, double_array)
 
+    # Verify immutability
+    double_array = tenmatInstance.double(True)
+    with pytest.raises(ValueError):
+        double_array[0] = 1
+
 
 def test_tenmat_ndims(sample_tenmat_4way):
     (params, tenmatInstance) = sample_tenmat_4way
@@ -610,9 +616,8 @@ def test_tenmat__str__(
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
     ## Test 2D
@@ -627,9 +632,8 @@ def test_tenmat__str__(
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
     # Test 4D
@@ -645,9 +649,8 @@ def test_tenmat__str__(
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
 

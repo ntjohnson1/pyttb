@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from math import prod
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal
 
 import numpy as np
 
@@ -25,14 +25,14 @@ from pyttb.pyttb_utils import (
 class tenmat:
     """Store tensor as a matrix."""
 
-    __slots__ = ("tshape", "rindices", "cindices", "data")
+    __slots__ = ("cindices", "data", "rindices", "tshape")
 
     def __init__(  # noqa: PLR0912
         self,
-        data: Optional[np.ndarray] = None,
-        rdims: Optional[np.ndarray] = None,
-        cdims: Optional[np.ndarray] = None,
-        tshape: Optional[Shape] = None,
+        data: np.ndarray | None = None,
+        rdims: np.ndarray | None = None,
+        cdims: np.ndarray | None = None,
+        tshape: Shape | None = None,
         copy: bool = True,
     ):
         """Construct a :class:`pyttb.tenmat` from explicit components.
@@ -98,11 +98,11 @@ class tenmat:
             cdims_empty = cdims is None or cdims.size == 0
             rdims_empty = rdims is None or rdims.size == 0
             tshape_empty = tshape is None or tshape == ()
-            assert (
-                rdims_empty and cdims_empty and tshape_empty
-            ), "When data is empty, rdims, cdims, and tshape must also be empty."
+            assert rdims_empty and cdims_empty and tshape_empty, (
+                "When data is empty, rdims, cdims, and tshape must also be empty."
+            )
 
-            self.tshape: Union[Tuple[()], Tuple[int, ...]] = ()
+            self.tshape: tuple[()] | tuple[int, ...] = ()
             self.rindices = np.array([])
             self.cindices = np.array([])
             self.data = np.array([], ndmin=2, order=self.order)
@@ -119,7 +119,7 @@ class tenmat:
                 assert False, "tshape must be specified when data is 1d array."
             else:
                 # make data a 2d array with shape (1, data.shape[0]), i.e., a row vector
-                data = np.reshape(data.copy(), (1, data.shape[0]), order=self.order)
+                data = np.reshape(data.copy("K"), (1, data.shape[0]), order=self.order)
 
         if len(data.shape) != 2:
             raise ValueError(
@@ -146,15 +146,15 @@ class tenmat:
         if not np.prod(np.array(tshape)[rdims]) * np.prod(
             np.array(tshape)[cdims]
         ) == prod(data.shape):
-            assert (
-                False
-            ), "data.shape does not match shape specified by rdims, cdims, and tshape."
+            assert False, (
+                "data.shape does not match shape specified by rdims, cdims, and tshape."
+            )
 
         # if rdims or cdims is empty, hstack will output an array of float not int
         if rdims.size == 0:
-            dims = cdims.copy()
+            dims = cdims.copy("K")
         elif cdims.size == 0:
-            dims = rdims.copy()
+            dims = rdims.copy("K")
         else:
             dims = np.hstack([rdims, cdims])
         if not len(dims) == n or not (alldims == np.sort(dims)).all():
@@ -164,8 +164,8 @@ class tenmat:
             )
 
         self.tshape = tshape
-        self.rindices = rdims.copy()
-        self.cindices = cdims.copy()
+        self.rindices = rdims.copy("K")
+        self.cindices = cdims.copy("K")
 
         if not copy and not self._matches_order(data):
             logging.warning(
@@ -271,7 +271,7 @@ class tenmat:
         order = np.hstack([self.rindices, self.cindices])
         data = self.data
         if copy:
-            data = self.data.copy()
+            data = self.data.copy("K")
         data = np.reshape(data, np.array(shape)[order], order=self.order)
         if order.size > 1:
             if not copy:
@@ -317,9 +317,14 @@ class tenmat:
             copy=True,
         )
 
-    def double(self) -> np.ndarray:
+    def double(self, immutable: bool = False) -> np.ndarray:
         """
         Convert a :class:`pyttb.tenmat` to an array of doubles.
+
+        Parameters
+        ----------
+        immutable: Whether or not the returned data cam be mutated. May enable
+            additional optimizations.
 
         Examples
         --------
@@ -335,12 +340,15 @@ class tenmat:
         >>> TM.double()  # doctest: +NORMALIZE_WHITESPACE
         array([[1., 1., 1., 1.],
                [1., 1., 1., 1.]])
-
-        Returns
-        -------
-        Copy of tenmat data.
         """
-        return to_memory_order(self.data, self.order, copy=True).astype(np.float64)
+        double = to_memory_order(self.data, self.order, copy=not immutable).astype(
+            np.float64
+        )
+        if immutable:
+            double.flags.writeable = False
+        elif np.shares_memory(double, self.data):
+            double = double.copy("K")
+        return double
 
     @property
     def ndims(self) -> int:
@@ -382,7 +390,7 @@ class tenmat:
         return float(np.linalg.norm(self.data))
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """Return the shape of a :class:`pyttb.tenmat`.
 
         Examples
@@ -795,9 +803,8 @@ class tenmat:
         if self.data.size == 0:
             s += "data = []\n"
         else:
-            s += "data[:, :] = \n"
+            s += "data[:, :] =\n"
             s += str(self.data)
-            s += "\n"
 
         return s
 

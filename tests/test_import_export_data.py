@@ -1,6 +1,7 @@
 # Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import os
 
@@ -163,10 +164,31 @@ def test_export_data_tensor(sample_tensor):
     assert T.isequal(X)
     os.unlink(data_filename)
 
+    # index_base unspecified
     data_filename = os.path.join(os.path.dirname(__file__), "data", "tensor_int.out")
     ttb.export_data(T, data_filename, fmt_data="%d")
 
     X = ttb.import_data(data_filename)
+    assert T.isequal(X)
+    os.unlink(data_filename)
+
+    index_base = 0
+    data_filename = os.path.join(
+        os.path.dirname(__file__), "data", f"tensor_int_index_base_{index_base}.out"
+    )
+    ttb.export_data(T, data_filename, fmt_data="%d", index_base=index_base)
+
+    X = ttb.import_data(data_filename, index_base=index_base)
+    assert T.isequal(X)
+    os.unlink(data_filename)
+
+    index_base = 1
+    data_filename = os.path.join(
+        os.path.dirname(__file__), "data", f"tensor_int_index_base_{index_base}.out"
+    )
+    ttb.export_data(T, data_filename, fmt_data="%d", index_base=index_base)
+
+    X = ttb.import_data(data_filename, index_base=index_base)
     assert T.isequal(X)
     os.unlink(data_filename)
 

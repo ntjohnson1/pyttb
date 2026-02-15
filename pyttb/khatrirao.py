@@ -3,6 +3,7 @@
 # Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import numpy as np
 
@@ -58,7 +59,7 @@ def khatrirao(*matrices: np.ndarray, reverse: bool = False) -> np.ndarray:
     # Computation
     P = matrices[0]
     for i in matrices[1:]:
-        P = np.reshape(i, newshape=(-1, 1, ncolFirst)) * np.reshape(
-            P, newshape=(1, -1, ncolFirst), order="F"
+        P = np.reshape(i, (-1, 1, ncolFirst)) * np.reshape(
+            P, (1, -1, ncolFirst), order="F"
         )
-    return np.reshape(P, newshape=(-1, ncolFirst), order="F")
+    return np.reshape(P, (-1, ncolFirst), order="F")

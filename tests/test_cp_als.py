@@ -1,6 +1,7 @@
 # Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import numpy as np
 import pytest
@@ -74,7 +75,7 @@ def test_cp_als_tensor_ktensor_init(capsys, sample_tensor):
     assert pytest.approx(output["fit"]) == 1
 
 
-def test_cp_als_incorrect_init(capsys, sample_tensor):
+def test_cp_als_incorrect_init(sample_tensor):
     (data, T) = sample_tensor
 
     # unsupported init type
@@ -161,7 +162,7 @@ def test_cp_als_tensor_dimorder(capsys, sample_tensor):
     )
 
 
-def test_cp_als_tensor_zeros(capsys, sample_tensor):
+def test_cp_als_tensor_zeros(capsys):
     # 2-way tensor
     T2 = ttb.tensor.from_function(np.zeros, (2, 2))
     (M2, Minit2, output2) = ttb.cp_als(T2, 2)

@@ -3,34 +3,35 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
 import pyttb as ttb
 from pyttb.opt.fg_setup import setup
-from pyttb.opt.optimizers import LBFGSB
+
+if TYPE_CHECKING:
+    from pyttb.opt.optimizers import LBFGSB
 
 
 def cp_opt(  # noqa:  PLR0913
-    data: Union[ttb.tensor, ttb.sptensor],
+    data: ttb.tensor | ttb.sptensor,
     rank: int,
-    optimizer: Union[LBFGSB],
-    init: Union[
-        Literal["random"],
-        Literal["random_normal"],
-        Literal["nvecs"],
-        ttb.ktensor,
-        List[np.ndarray],
-    ] = "random_normal",
-    state=None,
-    scale: Optional[float] = None,
-    Xnormsqr: Optional[float] = None,
+    optimizer: LBFGSB,
+    init: Literal["random"]
+    | Literal["random_normal"]
+    | Literal["nvecs"]
+    | ttb.ktensor
+    | list[np.ndarray] = "random_normal",
+    state: None = None,  # noqa: ARG001
+    scale: float | None = None,
+    Xnormsqr: float | None = None,
     printitn: int = 1,
-) -> Tuple[ttb.ktensor, ttb.ktensor, Dict]:
+) -> tuple[ttb.ktensor, ttb.ktensor, dict]:
     """Fits a CP decomposition with user-specified optimizer.
 
     The objective being optimized is F(M) = || X - M ||^2 / || X ||^2
@@ -93,15 +94,13 @@ def cp_opt(  # noqa:  PLR0913
 
 
 def _get_initial_guess(
-    data: Union[ttb.tensor, ttb.sptensor],
+    data: ttb.tensor | ttb.sptensor,
     rank: int,
-    init: Union[
-        Literal["random"],
-        Literal["random_normal"],
-        Literal["nvecs"],
-        ttb.ktensor,
-        List[np.ndarray],
-    ] = "random_normal",
+    init: Literal["random"]
+    | Literal["random_normal"]
+    | Literal["nvecs"]
+    | ttb.ktensor
+    | list[np.ndarray] = "random_normal",
 ) -> ttb.ktensor:
     """Get initial guess for cp_opt.
 
@@ -125,13 +124,13 @@ def _get_initial_guess(
         return ttb.ktensor(U0, copy=False)
     if init == "random":
         # TODO tie into shared generator/seed
-        def rand(shape: Tuple[int, ...]) -> np.ndarray:
+        def rand(shape: tuple[int, ...]) -> np.ndarray:
             return np.random.uniform(0, 1, size=shape)
 
         return ttb.ktensor.from_function(rand, data.shape, rank)
     if init == "random_normal":
 
-        def randn(shape: Tuple[int, ...]) -> np.ndarray:
+        def randn(shape: tuple[int, ...]) -> np.ndarray:
             return np.random.normal(0, 1, size=shape)
 
         return ttb.ktensor.from_function(randn, data.shape, rank)

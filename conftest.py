@@ -1,7 +1,9 @@
 """Pyttb pytest configuration."""
+
 # Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import numpy
 import numpy as np
@@ -91,9 +93,9 @@ def sample_tenmat_4way():  # noqa: D103
     cdims = np.array([2, 3])
     tenmatInstance = ttb.tenmat()
     tenmatInstance.tshape = tshape
-    tenmatInstance.rindices = rdims.copy()
-    tenmatInstance.cindices = cdims.copy()
-    tenmatInstance.data = data.copy()
+    tenmatInstance.rindices = rdims.copy("K")
+    tenmatInstance.cindices = cdims.copy("K")
+    tenmatInstance.data = data.copy("K")
     params = {
         "data": data,
         "rdims": rdims,

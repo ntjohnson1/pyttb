@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Tuple, Union
+from typing import Literal
 
 import numpy as np
 from numpy_groupies import aggregate as accumarray
@@ -23,15 +23,15 @@ from pyttb.pyttb_utils import (
 class sptenmat:
     """Store sparse tensor as a sparse matrix."""
 
-    __slots__ = ("tshape", "rdims", "cdims", "subs", "vals")
+    __slots__ = ("cdims", "rdims", "subs", "tshape", "vals")
 
     def __init__(  # noqa: PLR0913
         self,
-        subs: Optional[np.ndarray] = None,
-        vals: Optional[np.ndarray] = None,
-        rdims: Optional[np.ndarray] = None,
-        cdims: Optional[np.ndarray] = None,
-        tshape: Tuple[int, ...] = (),
+        subs: np.ndarray | None = None,
+        vals: np.ndarray | None = None,
+        rdims: np.ndarray | None = None,
+        cdims: np.ndarray | None = None,
+        tshape: tuple[int, ...] = (),
         copy: bool = True,
     ):
         """Construct a :class:`pyttb.sptenmat`.
@@ -91,14 +91,14 @@ class sptenmat:
         """
         # Empty case
         if rdims is None and cdims is None:
-            assert (
-                subs is None and vals is None
-            ), "Must provide rdims or cdims with values"
+            assert subs is None and vals is None, (
+                "Must provide rdims or cdims with values"
+            )
             self.subs = np.array([], ndmin=2, dtype=int)
             self.vals = np.array([], ndmin=2)
             self.rdims = np.array([], dtype=int)
             self.cdims = np.array([], dtype=int)
-            self.tshape: Union[Tuple[()], Tuple[int, ...]] = ()
+            self.tshape: tuple[()] | tuple[int, ...] = ()
             return
 
         if subs is None:
@@ -112,9 +112,9 @@ class sptenmat:
         rdims, cdims = gather_wrap_dims(n, rdims, cdims)
         # if rdims or cdims is empty, hstack will output an array of float not int
         if rdims.size == 0:
-            dims = cdims.copy()
+            dims = cdims.copy("K")
         elif cdims.size == 0:
-            dims = rdims.copy()
+            dims = rdims.copy("K")
         else:
             dims = np.hstack([rdims, cdims], dtype=int)
         assert len(dims) == n and (alldims == np.sort(dims)).all(), (
@@ -154,8 +154,8 @@ class sptenmat:
                 newvals = newvals[:, None]
 
             self.tshape = tshape
-            self.rdims = rdims.copy().astype(int)
-            self.cdims = cdims.copy().astype(int)
+            self.rdims = rdims.copy("K").astype(int)
+            self.cdims = cdims.copy("K").astype(int)
             self.subs = newsubs
             self.vals = newvals
         else:
@@ -168,10 +168,10 @@ class sptenmat:
     @classmethod
     def from_array(
         cls,
-        array: Union[sparse.coo_matrix, np.ndarray],
-        rdims: Optional[np.ndarray] = None,
-        cdims: Optional[np.ndarray] = None,
-        tshape: Tuple[int, ...] = (),
+        array: sparse.coo_matrix | np.ndarray,
+        rdims: np.ndarray | None = None,
+        cdims: np.ndarray | None = None,
+        tshape: tuple[int, ...] = (),
     ):
         """Construct a :class:`pyttb.sptenmat`.
 
@@ -272,7 +272,7 @@ class sptenmat:
         return self.copy()
 
     def to_sptensor(self) -> ttb.sptensor:
-        """Construct a :class:`pyttb.sptensor` from `:class:pyttb.sptenmat`.
+        """Construct a :class:`pyttb.sptensor` from :class:`pyttb.sptenmat`.
 
         Examples
         --------
@@ -307,7 +307,7 @@ class sptenmat:
         return ttb.sptensor(subs, vals, self.tshape)
 
     @property
-    def shape(self) -> Tuple[int, ...]:
+    def shape(self) -> tuple[int, ...]:
         """
         Return the shape of a :class:`pyttb.sptenmat`.
 
@@ -328,9 +328,13 @@ class sptenmat:
             n = np.prod(np.array(self.tshape)[self.cdims])
             return int(m), int(n)
 
-    def double(self) -> sparse.coo_matrix:
+    def double(self, immutable: bool = False) -> sparse.coo_matrix:  # noqa: ARG002
         """
         Convert a :class:`pyttb.sptenmat` to a COO :class:`scipy.sparse.coo_matrix`.
+
+        Parameters
+        ----------
+        immutable: Parameter for compatibility but coo_matrix doesn't allow assignment.
 
         Examples
         --------
@@ -617,7 +621,7 @@ class sptenmat:
 
         # An empty ndarray with minimum dimensions still has a shape
         if self.subs.size > 0:
-            for i in range(0, self.subs.shape[0]):
+            for i in range(self.subs.shape[0]):
                 s += "\t"
                 s += "["
                 idx = self.subs[i, :]

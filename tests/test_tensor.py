@@ -1,6 +1,7 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import copy
 
@@ -8,7 +9,7 @@ import numpy as np
 import pytest
 
 import pyttb as ttb
-from pyttb.tensor import min_split, mttv_left, mttv_mid
+from pyttb.tensor import _min_split, _mttv_left, _mttv_mid
 from tests.test_utils import assert_consistent_order
 
 
@@ -59,41 +60,42 @@ def test_tensor_initialization_from_data(sample_tensor_2way):
     # no shape specified
     tensorInstance1 = ttb.tensor(np.array([1, 2, 3]))
     data = np.array([1, 2, 3])
-    assert (
-        tensorInstance1.data.shape == data.shape
-    ), f"tensorInstance1:\n{tensorInstance1}"
-    assert np.array_equal(
-        tensorInstance1.data, data
-    ), f"tensorInstance1:\n{tensorInstance1}"
+    assert tensorInstance1.data.shape == data.shape, (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
+    assert np.array_equal(tensorInstance1.data, data), (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
     assert_consistent_order(tensorInstance, tensorInstance.data)
 
     # shape is 1 x 3
     tensorInstance1 = ttb.tensor(np.array([1, 2, 3]), (1, 3))
     data = np.array([[1, 2, 3]])
-    assert (
-        tensorInstance1.data.shape == data.shape
-    ), f"tensorInstance1:\n{tensorInstance1}"
-    assert np.array_equal(
-        tensorInstance1.data, data
-    ), f"tensorInstance1:\n{tensorInstance1}"
+    assert tensorInstance1.data.shape == data.shape, (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
+    assert np.array_equal(tensorInstance1.data, data), (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
     assert_consistent_order(tensorInstance, tensorInstance.data)
 
     # shape is 3 x 1
     tensorInstance1 = ttb.tensor(np.array([1, 2, 3]), (3, 1))
     data = np.array([[1], [2], [3]])
-    assert (
-        tensorInstance1.data.shape == data.shape
-    ), f"tensorInstance1:\n{tensorInstance1}"
-    assert np.array_equal(
-        tensorInstance1.data, data
-    ), f"tensorInstance1:\n{tensorInstance1}"
+    assert tensorInstance1.data.shape == data.shape, (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
+    assert np.array_equal(tensorInstance1.data, data), (
+        f"tensorInstance1:\n{tensorInstance1}"
+    )
     assert_consistent_order(tensorInstance, tensorInstance.data)
 
 
 def test_tensor_initialization_from_function(memory_layout):
     order = memory_layout["order"]
 
-    def function_handle(x):
+    # Dummy function handle
+    def function_handle(x):  # noqa: ARG001
         return np.array([[1, 2, 3], [4, 5, 6]], order=order)
 
     shape = (2, 3)
@@ -394,18 +396,18 @@ def test_tensor_logical_and(sample_tensor_2way):
 
     # Tensor And
     tensor_and = tensorInstance.logical_and(tensorInstance).data
-    assert np.array_equal(tensor_and, np.ones((params["shape"])))
+    assert np.array_equal(tensor_and, np.ones(params["shape"]))
     assert tensor_and.dtype == tensorInstance.data.dtype
     assert_consistent_order(tensorInstance, tensor_and)
 
     # Non-zero And
     non_zero_and = tensorInstance.logical_and(1).data
-    assert np.array_equal(non_zero_and, np.ones((params["shape"])))
+    assert np.array_equal(non_zero_and, np.ones(params["shape"]))
     assert non_zero_and.dtype == tensorInstance.data.dtype
 
     # Zero And
     zero_and = tensorInstance.logical_and(0).data
-    assert np.array_equal(zero_and, np.zeros((params["shape"])))
+    assert np.array_equal(zero_and, np.zeros(params["shape"]))
     assert zero_and.dtype == tensorInstance.data.dtype
 
 
@@ -608,21 +610,21 @@ def test_tensor__lt__(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way
 def test_tensor_norm(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
     # 2-way tensor
     (params2, tensorInstance2) = sample_tensor_2way
-    assert tensorInstance2.norm() == np.linalg.norm(
-        params2["data"].ravel()
-    ), f"tensorInstace2.norm(): {tensorInstance2.norm()}"
+    assert tensorInstance2.norm() == np.linalg.norm(params2["data"].ravel()), (
+        f"tensorInstace2.norm(): {tensorInstance2.norm()}"
+    )
 
     # 3-way tensor
     (params3, tensorInstance3) = sample_tensor_3way
-    assert tensorInstance3.norm() == np.linalg.norm(
-        params3["data"].ravel()
-    ), f"tensorInstace3.norm(): {tensorInstance3.norm()}"
+    assert tensorInstance3.norm() == np.linalg.norm(params3["data"].ravel()), (
+        f"tensorInstace3.norm(): {tensorInstance3.norm()}"
+    )
 
     # 4-way tensor
     (params4, tensorInstance4) = sample_tensor_4way
-    assert tensorInstance4.norm() == np.linalg.norm(
-        params4["data"].ravel()
-    ), f"tensorInstace4.norm(): {tensorInstance4.norm()}"
+    assert tensorInstance4.norm() == np.linalg.norm(params4["data"].ravel()), (
+        f"tensorInstace4.norm(): {tensorInstance4.norm()}"
+    )
 
 
 def test_tensor_logical_not(sample_tensor_2way):
@@ -639,18 +641,18 @@ def test_tensor_logical_or(sample_tensor_2way):
 
     # Tensor Or
     or_tensor = tensorInstance.logical_or(tensorInstance).data
-    assert np.array_equal(or_tensor, np.ones((params["shape"])))
+    assert np.array_equal(or_tensor, np.ones(params["shape"]))
     assert or_tensor.dtype == tensorInstance.data.dtype
     assert_consistent_order(tensorInstance, or_tensor)
 
     # Non-zero Or
     non_zero_or = tensorInstance.logical_or(1).data
-    assert np.array_equal(non_zero_or, np.ones((params["shape"])))
+    assert np.array_equal(non_zero_or, np.ones(params["shape"]))
     assert non_zero_or.dtype == tensorInstance.data.dtype
 
     # Zero Or
     zero_or = tensorInstance.logical_or(0).data
-    assert np.array_equal(zero_or, np.ones((params["shape"])))
+    assert np.array_equal(zero_or, np.ones(params["shape"]))
     assert zero_or.dtype == tensorInstance.data.dtype
 
 
@@ -659,18 +661,18 @@ def test_tensor_logical_xor(sample_tensor_2way):
 
     # Tensor xor
     xor_tensor = tensorInstance.logical_xor(tensorInstance).data
-    assert np.array_equal(xor_tensor, np.zeros((params["shape"])))
+    assert np.array_equal(xor_tensor, np.zeros(params["shape"]))
     assert xor_tensor.dtype == tensorInstance.data.dtype
     assert_consistent_order(tensorInstance, xor_tensor)
 
     # Non-zero xor
     non_zero_xor = tensorInstance.logical_xor(1).data
-    assert np.array_equal(non_zero_xor, np.zeros((params["shape"])))
+    assert np.array_equal(non_zero_xor, np.zeros(params["shape"]))
     assert non_zero_xor.dtype == tensorInstance.data.dtype
 
     # Zero xor
     zero_xor = tensorInstance.logical_xor(0).data
-    assert np.array_equal(zero_xor, np.ones((params["shape"])))
+    assert np.array_equal(zero_xor, np.ones(params["shape"]))
     assert zero_xor.dtype == tensorInstance.data.dtype
 
 
@@ -788,6 +790,11 @@ def test_tensor_double(sample_tensor_2way):
     double_array = tensorInstance.double()
     assert np.array_equal(double_array, params["data"])
     assert_consistent_order(tensorInstance, double_array)
+
+    # Verify immutability
+    double_array = tensorInstance.double(True)
+    with pytest.raises(ValueError):
+        double_array[0] = 1
 
 
 def test_tensor_isequal(sample_tensor_2way):
@@ -1084,7 +1091,7 @@ def test_tensor__repr__(sample_tensor_2way):
     str(ttb.tensor())
 
 
-def test_tensor_exp(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
+def test_tensor_exp(sample_tensor_2way):
     (params, tensorInstance) = sample_tensor_2way
     exp_tensor = tensorInstance.exp()
     assert np.array_equal(tensorInstance.exp().data, np.exp(params["data"]))
@@ -1115,21 +1122,21 @@ def test_tensor_innerprod(sample_tensor_2way, sample_tensor_3way, sample_tensor_
 
     # 2-way
     (params2, tensorInstance2) = sample_tensor_2way
-    assert (
-        tensorInstance2.innerprod(tensorInstance2) == 91
-    ), f"tensorInstance2.innerprod(tensorInstance2): {tensorInstance2.innerprod(tensorInstance2)}"
+    assert tensorInstance2.innerprod(tensorInstance2) == 91, (
+        f"tensorInstance2.innerprod(tensorInstance2): {tensorInstance2.innerprod(tensorInstance2)}"
+    )
 
     # 3-way
     (params3, tensorInstance3) = sample_tensor_3way
-    assert (
-        tensorInstance3.innerprod(tensorInstance3) == 650
-    ), f"tensorInstance3.innerprod(tensorInstance3): {tensorInstance3.innerprod(tensorInstance3)}"
+    assert tensorInstance3.innerprod(tensorInstance3) == 650, (
+        f"tensorInstance3.innerprod(tensorInstance3): {tensorInstance3.innerprod(tensorInstance3)}"
+    )
 
     # 4-way
     (params4, tensorInstance4) = sample_tensor_4way
-    assert (
-        tensorInstance4.innerprod(tensorInstance4) == 180441
-    ), f"tensorInstance4.innerprod(tensorInstance4): {tensorInstance4.innerprod(tensorInstance4)}"
+    assert tensorInstance4.innerprod(tensorInstance4) == 180441, (
+        f"tensorInstance4.innerprod(tensorInstance4): {tensorInstance4.innerprod(tensorInstance4)}"
+    )
 
 
 def test_tensor_mask(sample_tensor_2way):
@@ -1253,7 +1260,7 @@ def test_tensor_ttm(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
     assert "dims must contain values in [0,self.dims)" in str(excinfo)
 
 
-def test_tensor_ttt(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
+def test_tensor_ttt():
     M31 = ttb.tensor(np.reshape(np.arange(1, 2 * 3 * 4 + 1), [4, 3, 2], order="F"))
     M32 = ttb.tensor(np.reshape(np.arange(1, 2 * 3 * 4 + 1), [3, 4, 2], order="F"))
 
@@ -1553,7 +1560,7 @@ def test_tensor_symmetrize(sample_tensor_2way):
     assert "Dimension mismatch for symmetrization" in str(excinfo)
 
 
-def test_tensor__str__(sample_tensor_2way):
+def test_tensor__str__():
     # Test 1D
     data = np.random.normal(size=(4,))
     tensorInstance = ttb.tensor(data)
@@ -1581,7 +1588,7 @@ def test_tensor__str__(sample_tensor_2way):
     s += f"tensor of shape {tensorInstance.shape} with order F"
     for i in range(data.shape[-1]):
         s += "\ndata"
-        s += "[:, :, {}] =\n".format(i)
+        s += f"[:, :, {i}] =\n"
         s += data[:, :, i].__str__()
     assert s == tensorInstance.__str__()
 
@@ -1591,7 +1598,7 @@ def test_tensor__str__(sample_tensor_2way):
     s += f"tensor of shape {tensorInstance.shape} with order F"
     for i in range(data.shape[-1]):
         s += "\ndata"
-        s += "[:, :, {}] =\n".format(i)
+        s += f"[:, :, {i}] =\n"
         s += data[:, :, i].__str__()
     assert s == tensorInstance.__str__()
 
@@ -1603,7 +1610,7 @@ def test_tensor__str__(sample_tensor_2way):
     for i in range(data.shape[-1]):
         for j in range(data.shape[-2]):
             s += "\ndata"
-            s += "[:, :, {}, {}] =\n".format(j, i)
+            s += f"[:, :, {j}, {i}] =\n"
             s += data[:, :, j, i].__str__()
     assert s == tensorInstance.__str__()
 
@@ -1616,7 +1623,7 @@ def test_tensor__str__(sample_tensor_2way):
         for j in range(data.shape[-2]):
             for k in range(data.shape[-3]):
                 s += "\ndata"
-                s += "[:, :, {}, {}, {}] =\n".format(k, j, i)
+                s += f"[:, :, {k}, {j}, {i}] =\n"
                 s += data[:, :, k, j, i].__str__()
     assert s == tensorInstance.__str__()
 
@@ -1810,7 +1817,7 @@ def test_mttv_left():
     C = 5
     U = np.ones((m1, C))
     W = np.ones((m1 * np.prod(mi), C))
-    W_out = mttv_left(W, U)
+    W_out = _mttv_left(W, U)
     assert W_out.shape == (np.prod(mi), C)
 
 
@@ -1820,16 +1827,16 @@ def test_mttv_mid():
     C = 5
     U = [np.ones((m, C)) for m in mi]
     W = np.ones((m1 * np.prod(mi), C))
-    W_out = mttv_mid(W, U)
+    W_out = _mttv_mid(W, U)
     assert W_out.shape == (m1, C)
 
-    W_out = mttv_mid(W, [])
+    W_out = _mttv_mid(W, [])
     assert W_out is W
 
 
 def test_min_split():
     shape = (3, 3, 3, 3)
-    idx = min_split(shape)
+    idx = _min_split(shape)
     assert idx == 1
 
 

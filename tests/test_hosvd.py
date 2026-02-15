@@ -1,6 +1,7 @@
 # Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import numpy as np
 import pytest
@@ -26,7 +27,7 @@ def sample_tensor_3way():
     return params, tensorInstance
 
 
-def test_hosvd_simple_convergence(capsys, sample_tensor):
+def test_hosvd_simple_convergence(sample_tensor):
     (data, T) = sample_tensor
     tol = 1e-4
     result = ttb.hosvd(T, tol)
@@ -34,37 +35,37 @@ def test_hosvd_simple_convergence(capsys, sample_tensor):
 
     tol = 1e-4
     result = ttb.hosvd(T, tol, sequential=False)
-    assert (
-        result.full() - T
-    ).norm() / T.norm() < tol, "Failed to converge for non-sequential option"
+    assert (result.full() - T).norm() / T.norm() < tol, (
+        "Failed to converge for non-sequential option"
+    )
 
     impossible_tol = 1e-20
     with pytest.warns(UserWarning):
         result = ttb.hosvd(T, impossible_tol)
-    assert (
-        result.full() - T
-    ).norm() / T.norm() > impossible_tol, "Converged beyond provided precision"
+    assert (result.full() - T).norm() / T.norm() > impossible_tol, (
+        "Converged beyond provided precision"
+    )
 
 
-def test_hosvd_default_init(capsys, sample_tensor):
+def test_hosvd_default_init(sample_tensor):
     (data, T) = sample_tensor
     _ = ttb.hosvd(T, 1)
 
 
-def test_hosvd_smoke_test_verbosity(capsys, sample_tensor):
+def test_hosvd_smoke_test_verbosity(sample_tensor):
     """For now just make sure verbosity calcs don't crash"""
     (data, T) = sample_tensor
     ttb.hosvd(T, 1, verbosity=10)
 
 
-def test_hosvd_incorrect_ranks(capsys, sample_tensor):
+def test_hosvd_incorrect_ranks(sample_tensor):
     (data, T) = sample_tensor
     ranks = list(range(T.ndims - 1))
     with pytest.raises(ValueError):
         _ = ttb.hosvd(T, 1, ranks=ranks)
 
 
-def test_hosvd_incorrect_dimorder(capsys, sample_tensor):
+def test_hosvd_incorrect_dimorder(sample_tensor):
     (data, T) = sample_tensor
     dimorder = list(range(T.ndims - 1))
     with pytest.raises(ValueError):

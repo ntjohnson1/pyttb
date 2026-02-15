@@ -16,6 +16,8 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+from __future__ import annotations
+
 import os
 import sys
 
@@ -48,6 +50,7 @@ release = ""
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx_toolbox.more_autodoc.overloads",
     "sphinx.ext.intersphinx",
     "sphinx.ext.mathjax",
     "sphinx.ext.viewcode",
@@ -69,8 +72,10 @@ napoleon_use_param = False
 napoleon_use_rtype = False
 
 intersphinx_mapping = {
-    "numpy": ("http://docs.scipy.org/doc/numpy/", "numpy.inv"),
-    "python": ("http://docs.python.org/3.8/", "python.inv"),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "python": ("http://docs.python.org/3.10/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
 }
 
 # Add any paths that contain templates here, relative to this directory.
@@ -199,4 +204,4 @@ texinfo_documents = [
 # Autodoc settings
 autoclass_content = "class"
 autodoc_member_order = "bysource"
-autodoc_class_signature = "separated"
+autodoc_class_signature = "mixed"
