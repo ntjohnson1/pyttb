@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 import pyttb as ttb
-from pyttb.tensor import min_split, mttv_left, mttv_mid
+from pyttb.tensor import _min_split, _mttv_left, _mttv_mid
 from tests.test_utils import assert_consistent_order
 
 
@@ -94,7 +94,8 @@ def test_tensor_initialization_from_data(sample_tensor_2way):
 def test_tensor_initialization_from_function(memory_layout):
     order = memory_layout["order"]
 
-    def function_handle(x):
+    # Dummy function handle
+    def function_handle(x):  # noqa: ARG001
         return np.array([[1, 2, 3], [4, 5, 6]], order=order)
 
     shape = (2, 3)
@@ -1090,7 +1091,7 @@ def test_tensor__repr__(sample_tensor_2way):
     str(ttb.tensor())
 
 
-def test_tensor_exp(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
+def test_tensor_exp(sample_tensor_2way):
     (params, tensorInstance) = sample_tensor_2way
     exp_tensor = tensorInstance.exp()
     assert np.array_equal(tensorInstance.exp().data, np.exp(params["data"]))
@@ -1259,7 +1260,7 @@ def test_tensor_ttm(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
     assert "dims must contain values in [0,self.dims)" in str(excinfo)
 
 
-def test_tensor_ttt(sample_tensor_2way, sample_tensor_3way, sample_tensor_4way):
+def test_tensor_ttt():
     M31 = ttb.tensor(np.reshape(np.arange(1, 2 * 3 * 4 + 1), [4, 3, 2], order="F"))
     M32 = ttb.tensor(np.reshape(np.arange(1, 2 * 3 * 4 + 1), [3, 4, 2], order="F"))
 
@@ -1559,7 +1560,7 @@ def test_tensor_symmetrize(sample_tensor_2way):
     assert "Dimension mismatch for symmetrization" in str(excinfo)
 
 
-def test_tensor__str__(sample_tensor_2way):
+def test_tensor__str__():
     # Test 1D
     data = np.random.normal(size=(4,))
     tensorInstance = ttb.tensor(data)
@@ -1816,7 +1817,7 @@ def test_mttv_left():
     C = 5
     U = np.ones((m1, C))
     W = np.ones((m1 * np.prod(mi), C))
-    W_out = mttv_left(W, U)
+    W_out = _mttv_left(W, U)
     assert W_out.shape == (np.prod(mi), C)
 
 
@@ -1826,16 +1827,16 @@ def test_mttv_mid():
     C = 5
     U = [np.ones((m, C)) for m in mi]
     W = np.ones((m1 * np.prod(mi), C))
-    W_out = mttv_mid(W, U)
+    W_out = _mttv_mid(W, U)
     assert W_out.shape == (m1, C)
 
-    W_out = mttv_mid(W, [])
+    W_out = _mttv_mid(W, [])
     assert W_out is W
 
 
 def test_min_split():
     shape = (3, 3, 3, 3)
-    idx = min_split(shape)
+    idx = _min_split(shape)
     assert idx == 1
 
 
