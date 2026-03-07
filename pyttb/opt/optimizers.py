@@ -89,9 +89,11 @@ class LBFGSB(LBFGSB_Base):
             gradient_handle,
         )
 
-        x0 = model.tovec(False)
         model, lbfgsb_info = self._run_solver(
-            x0, model, lbfgsb_func_grad, lower_bound, data.shape
+            model,
+            data,
+            lbfgsb_func_grad,
+            lower_bound,
         )
 
         # TODO big print output
