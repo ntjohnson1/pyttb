@@ -27,7 +27,7 @@ def test_estimate_helper():
     all_indices = np.array(all_indices)
     values, _ = estimate_helper(factor_matrices, np.array(all_indices))
     np.testing.assert_array_equal(full[all_indices], values)
-    # TODO should probably test Zexploded but thats a pain
+    # TODO should probably test Zexploded but that's a pain
 
     values, Z = estimate_helper(factor_matrices, np.array([]))
     assert values.size == 0
@@ -44,7 +44,7 @@ def test_estimate():
     data_vals = np.ones((2,))
     weights = np.ones_like(data_vals)
 
-    def no_op(data, model):
+    def no_op(data, model):  # noqa: ARG001
         """Function handle that does nothing"""
         return data
 

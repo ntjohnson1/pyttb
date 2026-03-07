@@ -1,6 +1,7 @@
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import numpy as np
 import pytest
@@ -192,7 +193,7 @@ def test_cpapr_mu(capsys, sample_tensor1, default_init_ktensor):
     capsys.readouterr()
     assert np.isclose(M.full().data, ktensorSolnInstance.full().data).all()
 
-    # Assert given an inital guess of the final answer yields immediate convergence
+    # Assert given an initial guess of the final answer yields immediate convergence
     M, _, output = ttb.cp_apr(
         input_tensor=tensorInstance, rank=2, init=ktensorSolnInstance
     )

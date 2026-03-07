@@ -1,6 +1,7 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import copy
 import logging
@@ -10,6 +11,7 @@ import pytest
 import scipy.sparse as sparse
 
 import pyttb as ttb
+from tests.test_utils import assert_consistent_order
 
 
 @pytest.fixture()
@@ -78,7 +80,7 @@ def test_sptensor_initialization_from_data(sample_sptensor):
 
 def test_sptensor_initialization_from_function():
     # Random Tensor Success
-    def function_handle(*args):
+    def function_handle(*args):  # noqa: ARG001
         return np.array([[0.5], [1.5], [2.5], [3.5], [4.5], [5.5]])
 
     np.random.seed(123)
@@ -89,7 +91,7 @@ def test_sptensor_initialization_from_function():
     assert sptensorInstance.shape == shape
     assert len(sptensorInstance.subs) == nz
 
-    # NZ as a propotion in [0,1)
+    # NZ as a proportion in [0,1)
     nz = 0.09375
     sptensorInstance = ttb.sptensor.from_function(function_handle, shape, nz)
     assert np.array_equal(sptensorInstance.vals, function_handle())
@@ -115,7 +117,7 @@ def test_sptensor_initialization_from_function():
     )
 
 
-def test_sptensor_initialization_from_aggregator(sample_sptensor):
+def test_sptensor_initialization_from_aggregator():
     subs = np.array([[1, 1, 1], [1, 1, 3], [2, 2, 2], [3, 3, 3], [1, 1, 1], [1, 1, 1]])
     vals = np.array([[0.5], [1.5], [2.5], [3.5], [4.5], [5.5]])
     shape = (4, 4, 4)
@@ -142,11 +144,11 @@ def test_sptensor_initialization_from_aggregator(sample_sptensor):
 
     with pytest.raises(AssertionError) as excinfo:
         ttb.sptensor.from_aggregator(
-            np.concatenate((subs, np.ones((6, 1))), axis=1), vals, shape
+            np.concatenate((subs, np.ones((6, 1), dtype=int)), axis=1), vals, shape
         )
     assert "More subscripts than specified by shape" in str(excinfo)
 
-    badSubs = subs.copy()
+    badSubs = subs.copy("K")
     badSubs[0, 0] = 11
     with pytest.raises(AssertionError) as excinfo:
         ttb.sptensor.from_aggregator(badSubs, vals, shape)
@@ -487,7 +489,7 @@ class TestSetItem:
 
         # Set empty tensor with sptensor via ambiguous slice
         emptyTensor = ttb.sptensor()
-        # TODO revist this after setitem cleanup. Probably won't support arbitrary slice on empty tensor
+        # TODO revisit this after setitem cleanup. Probably won't support arbitrary slice on empty tensor
         emptyTensor[:, :, :] = sptensorInstance
         assert emptyTensor.isequal(sptensorInstance)
 
@@ -666,9 +668,9 @@ def test_sptensor_norm(sample_sptensor):
 def test_sptensor_allsubs(sample_sptensor):
     (data, sptensorInstance) = sample_sptensor
     result = []
-    for i in range(0, data["shape"][0]):
-        for j in range(0, data["shape"][1]):
-            for k in range(0, data["shape"][2]):
+    for i in range(data["shape"][0]):
+        for j in range(data["shape"][1]):
+            for k in range(data["shape"][2]):
                 result.append([i, j, k])
     assert np.array_equal(sptensorInstance.allsubs(), np.array(result))
 
@@ -680,9 +682,9 @@ def test_sptensor_logical_not(sample_sptensor):
     (data, sptensorInstance) = sample_sptensor
     result = []
     data_subs = data["subs"].tolist()
-    for i in range(0, data["shape"][0]):
-        for j in range(0, data["shape"][1]):
-            for k in range(0, data["shape"][2]):
+    for i in range(data["shape"][0]):
+        for j in range(data["shape"][1]):
+            for k in range(data["shape"][2]):
                 if [i, j, k] not in data_subs:
                     result.append([i, j, k])
     notSptensorInstance = sptensorInstance.logical_not()
@@ -750,7 +752,7 @@ def test_sptensor__eq__(sample_sptensor):
     logging.debug(f"\nsptensorInstance = {sptensorInstance}")
     logging.debug(f"\ntype(eqSptensor.subs) = \n{type(eqSptensor.subs)}")
     for i in range(eqSptensor.subs.shape[0]):
-        logging.debug(f"{i}\t{eqSptensor.subs[i,:]}")
+        logging.debug(f"{i}\t{eqSptensor.subs[i, :]}")
     logging.debug(f"\neqSptensor.subs = \n{eqSptensor.subs}")
     logging.debug(f"\neqSptensor.subs.shape[0] = {eqSptensor.subs.shape[0]}")
     logging.debug(f"\nsptensorInstance.shape = {sptensorInstance.shape}")
@@ -908,6 +910,14 @@ def test_sptensor__add__(sample_sptensor):
     assert np.array_equal(subSptensor.data, sptensorInstance.to_tensor().data)
 
 
+def test_sptensor__radd__(sample_sptensor):
+    (data, sptensorInstance) = sample_sptensor
+
+    # scalar + Sptensor
+    subSptensor = 0 + sptensorInstance
+    assert np.array_equal(subSptensor.data, sptensorInstance.to_tensor().data)
+
+
 def test_sptensor_isequal(sample_sptensor):
     (data, sptensorInstance) = sample_sptensor
 
@@ -1024,11 +1034,18 @@ def test_sptensor_double(sample_sptensor):
     actualIdx = tuple(data["subs"].transpose())
     denseData[actualIdx] = data["vals"].transpose()[0]
 
-    assert np.array_equal(sptensorInstance.double(), denseData)
-    assert sptensorInstance.double().shape == data["shape"]
+    double_array = sptensorInstance.double()
+    assert np.array_equal(double_array, denseData)
+    assert double_array.shape == data["shape"]
+    assert_consistent_order(sptensorInstance, double_array)
+
+    # Verify immutability
+    double_array = sptensorInstance.double(True)
+    with pytest.raises(ValueError):
+        double_array[0] = 1
 
 
-def test_sptensor_compare(sample_sptensor):
+def test_sptensor_compare():
     # This is kind of a test just for coverage sake
     # mostly make clear that the operator check was intentional
     empty_sptensor = ttb.sptensor()
@@ -1165,7 +1182,7 @@ def test_sptensor__gt__(sample_sptensor):
     # Test comparison to tensor
     assert (sptensorInstance > sptensorInstance.full()).vals.size == 0
 
-    # Test comparison to tensor of different sparsity patter
+    # Test comparison to tensor of different sparsity pattern
     denseTensor = sptensorInstance.full()
     denseTensor[1, 1, 2] = -1
     assert np.array_equal(
@@ -1295,7 +1312,7 @@ def test_sptensor_innerprod(sample_sptensor):
     # Wrong type for innerprod
     with pytest.raises(AssertionError) as excinfo:
         sptensorInstance.innerprod(5)
-    assert f"Inner product between sptensor and {type(5)} not supported" in str(excinfo)
+    assert f"Inner product between sptensor and {int} not supported" in str(excinfo)
 
 
 def test_sptensor_logical_xor(sample_sptensor):
@@ -1354,7 +1371,7 @@ def test_sptensor_squeeze(sample_sptensor):
     )
     assert np.array_equal(
         ttb.sptensor(np.array([[0, 0, 0]]), np.array([4]), (2, 2, 1)).squeeze().vals,
-        np.array([4]),
+        np.array([[4]]),
     )
 
     # Singleton dimension with empty sptensor
@@ -1425,7 +1442,9 @@ def test_sptensor_mask(sample_sptensor):
     (data, sptensorInstance) = sample_sptensor
 
     # Mask captures all nonzero entries
-    assert np.array_equal(sptensorInstance.mask(sptensorInstance), data["vals"])
+    mask_array = sptensorInstance.mask(sptensorInstance)
+    assert np.array_equal(mask_array, data["vals"])
+    assert_consistent_order(sptensorInstance, mask_array)
 
     # Mask correctly skips zeros
     S = ttb.sptensor()
@@ -1434,7 +1453,9 @@ def test_sptensor_mask(sample_sptensor):
     W = ttb.sptensor()
     W[0, 0] = 1
     W[1, 0] = 1
-    assert np.array_equal(S.mask(W), np.array([[S[0, 0]], [S[1, 0]]]))
+    mask_array = S.mask(W)
+    assert np.array_equal(mask_array, np.array([[S[0, 0]], [S[1, 0]]]))
+    assert_consistent_order(sptensorInstance, mask_array)
 
     # Mask too large
     with pytest.raises(AssertionError) as excinfo:
@@ -1707,22 +1728,24 @@ def test_sptensor_mttkrp(sample_sptensor):
     # MTTKRP with array of matrices
     # Note this is more of a regression test against the output of MATLAB TTB
     matrix = np.ones((4, 4))
+    mttkrp_result = sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 0)
     assert np.array_equal(
-        sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 0),
-        np.array(
-            [[0, 0, 0, 0], [2, 2, 2, 2], [2.5, 2.5, 2.5, 2.5], [3.5, 3.5, 3.5, 3.5]]
-        ),
+        mttkrp_result,
+        np.array([4 * [0], 4 * [2], 4 * [2.5], 4 * [3.5]]),
     )
+    assert_consistent_order(sptensorInstance, mttkrp_result)
+
     assert np.array_equal(
         sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 1),
         sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 0),
     )
+
+    mttkrp_result = sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 2)
     assert np.array_equal(
-        sptensorInstance.mttkrp(np.array([matrix, matrix, matrix]), 2),
-        np.array(
-            [[0, 0, 0, 0], [0.5, 0.5, 0.5, 0.5], [2.5, 2.5, 2.5, 2.5], [5, 5, 5, 5]]
-        ),
+        mttkrp_result,
+        np.array([4 * [0], 4 * [0.5], 4 * [2.5], 4 * [5]]),
     )
+    assert_consistent_order(sptensorInstance, mttkrp_result)
 
     # MTTKRP with factor matrices from ktensor
     K = ttb.ktensor([matrix, matrix, matrix])
@@ -1745,8 +1768,8 @@ def test_sptensor_mttkrp(sample_sptensor):
     assert "List of factor matrices is the wrong length" in str(excinfo)
 
     with pytest.raises(AssertionError) as excinfo:
-        sptensorInstance.mttkrp("string", 0)
-    assert "Second argument must be list of numpy.ndarray's or a ktensor" in str(
+        sptensorInstance.mttkrp(5, 0)
+    assert "Second argument must be a sequence of numpy.ndarray's or a ktensor" in str(
         excinfo
     )
 
@@ -1755,18 +1778,25 @@ def test_sptensor_nvecs(sample_sptensor):
     (data, sptensorInstance) = sample_sptensor
 
     # Test for one eigenvector
-    assert np.allclose((sptensorInstance.nvecs(1, 1)), np.array([0, 0, 0, 1])[:, None])
+    nvecs_result = sptensorInstance.nvecs(1, 1)
+    assert np.allclose(nvecs_result, np.array([0, 0, 0, 1])[:, None])
+    assert_consistent_order(sptensorInstance, nvecs_result)
+
+    nvecs_result = sptensorInstance.nvecs(1, 2)
     assert np.allclose(
-        (sptensorInstance.nvecs(1, 2)),
+        nvecs_result,
         np.array([[0, 0, 0, 1], [0, 0, 1, 0]]).transpose(),
     )
+    assert_consistent_order(sptensorInstance, nvecs_result)
 
     # Test for r >= N-1, requires cast to dense
     ans = np.zeros((4, 3))
     ans[3, 0] = 1
     ans[2, 1] = 1
     ans[1, 2] = 1
-    assert np.allclose((sptensorInstance.nvecs(1, 3)), ans)
+    nvecs_result = sptensorInstance.nvecs(1, 3)
+    assert np.allclose(nvecs_result, ans)
+    assert_consistent_order(sptensorInstance, nvecs_result)
 
     # Negative test, check for only singleton dims
     with pytest.raises(ValueError):
@@ -1884,9 +1914,9 @@ def test_sptendiag():
     X = ttb.sptendiag(elements)
     for i in range(N):
         diag_index = (i,) * N
-        assert (
-            X[diag_index] == i
-        ), f"Idx: {diag_index} expected: {i} got: {X[diag_index]}"
+        assert X[diag_index] == i, (
+            f"Idx: {diag_index} expected: {i} got: {X[diag_index]}"
+        )
 
     # Exact shape
     X = ttb.sptendiag(elements, tuple(exact_shape))

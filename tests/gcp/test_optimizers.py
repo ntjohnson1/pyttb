@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pytest
 
@@ -12,14 +14,17 @@ from pyttb.gcp import samplers
 from pyttb.gcp.handles import gaussian, gaussian_grad
 from pyttb.gcp.optimizers import LBFGSB, SGD, Adagrad, Adam
 
-global f_est
-f_est = 0.0
+if TYPE_CHECKING:
+    from pyttb.gcp.fg_setup import function_type
 
 
-def diverging_function_handle(data: np.ndarray, model: np.ndarray) -> np.ndarray:
-    global f_est
-    f_est += 1.0
-    return f_est * data
+def diverging_function_handle_factory(function_handle: function_type) -> function_type:
+    """Returns a function that diverges when the gradient is correct."""
+
+    def diverging_function_handle(data: np.ndarray, model: np.ndarray) -> np.ndarray:
+        return -1.0 * function_handle(data, model)
+
+    return diverging_function_handle
 
 
 @pytest.fixture()
@@ -35,7 +40,7 @@ def generate_problem():
 def test_sgd(generate_problem):
     dense_data, model, sampler = generate_problem
 
-    solver = SGD(max_iters=2, epoch_iters=1)
+    solver = SGD(max_iters=3, epoch_iters=1)
     result, info = solver.solve(
         model, dense_data, gaussian, gaussian_grad, sampler=sampler
     )
@@ -47,9 +52,13 @@ def test_sgd(generate_problem):
         inf_data = np.inf * ttb.tenones(dense_data.shape)
         solver.solve(model, inf_data, gaussian, gaussian_grad, sampler=sampler)
 
-    # Force bad step
+    # Force bad step to check rejection
     result, info = solver.solve(
-        model, dense_data, diverging_function_handle, gaussian_grad, sampler=sampler
+        model,
+        dense_data,
+        diverging_function_handle_factory(gaussian),
+        gaussian_grad,
+        sampler=sampler,
     )
     assert model.isequal(result)
     assert solver._nfails == min(solver._max_iters, solver._max_fails + 1)
@@ -58,17 +67,21 @@ def test_sgd(generate_problem):
 def test_adam(generate_problem):
     dense_data, model, sampler = generate_problem
 
-    solver = Adam(max_iters=1, epoch_iters=1)
+    solver = Adam(max_iters=3, epoch_iters=1)
     result, info = solver.solve(
         model, dense_data, gaussian, gaussian_grad, sampler=sampler
     )
     assert isinstance(info, dict)
     assert (model.full() - dense_data).norm() > (result.full() - dense_data).norm()
 
-    # Force bad step
-    solver = Adam(max_iters=1, epoch_iters=1)
+    # Force bad step to check rejection
+    solver = Adam(max_iters=3, epoch_iters=1)
     result, info = solver.solve(
-        model, dense_data, diverging_function_handle, gaussian_grad, sampler=sampler
+        model,
+        dense_data,
+        diverging_function_handle_factory(gaussian),
+        gaussian_grad,
+        sampler=sampler,
     )
     assert model.isequal(result)
     assert [np.testing.assert_array_equal(mk, np.zeros_like(mk)) for mk in solver._m]
@@ -79,17 +92,21 @@ def test_adam(generate_problem):
 def test_adagrad(generate_problem):
     dense_data, model, sampler = generate_problem
 
-    solver = Adagrad(max_iters=1, epoch_iters=1)
+    solver = Adagrad(max_iters=3, epoch_iters=1)
     result, info = solver.solve(
         model, dense_data, gaussian, gaussian_grad, sampler=sampler
     )
     assert isinstance(info, dict)
     assert (model.full() - dense_data).norm() > (result.full() - dense_data).norm()
 
-    # Force bad step
-    solver = Adagrad(max_iters=1, epoch_iters=1)
+    # Force bad step to check rejection
+    solver = Adagrad(max_iters=3, epoch_iters=1)
     result, info = solver.solve(
-        model, dense_data, diverging_function_handle, gaussian_grad, sampler=sampler
+        model,
+        dense_data,
+        diverging_function_handle_factory(gaussian),
+        gaussian_grad,
+        sampler=sampler,
     )
     assert model.isequal(result)
     assert solver._gnormsum == 0.0
@@ -127,7 +144,7 @@ def test_lbfgsb_callback(generate_problem):
         _, info = solver.solve(model, dense_data, gaussian, gaussian_grad)
 
     # Test user-defined callback
-    class Callback(object):
+    class Callback:
         def __init__(self, rows: int = 0, cols: int = 0):
             self.i = 0
             self.xk = np.zeros((rows, cols))

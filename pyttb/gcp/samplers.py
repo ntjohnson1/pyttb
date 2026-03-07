@@ -1,17 +1,18 @@
-"""Implementation of various sampling approaches for GCP OPT"""
+"""Implementation of various sampling approaches for GCP OPT."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from functools import partial
 from math import ceil
-from typing import Callable, Optional, Tuple, Union, cast
+from typing import cast
 
 import numpy as np
 
@@ -20,20 +21,20 @@ from pyttb.pyttb_utils import tt_sub2ind
 from pyttb.sptensor import sptensor
 from pyttb.tensor import tensor
 
-sample_type = Tuple[np.ndarray, np.ndarray, np.ndarray]
-sampler_type = Callable[[Union[tensor, sptensor]], sample_type]
+sample_type = tuple[np.ndarray, np.ndarray, np.ndarray]
+sampler_type = Callable[[tensor | sptensor], sample_type]
 
 
 @dataclass
 class StratifiedCount:
-    """Contains stratified sampling counts"""
+    """Contains stratified sampling counts."""
 
     num_zeros: int
     num_nonzeros: int
 
 
 class Samplers(Enum):
-    """Implemented Samplers"""
+    """Implemented Samplers."""
 
     UNIFORM = 0
     SEMISTRATIFIED = 1
@@ -41,15 +42,15 @@ class Samplers(Enum):
 
 
 class GCPSampler:
-    """Contains Gradient and Function Sampling Details"""
+    """Contains Gradient and Function Sampling Details."""
 
     def __init__(  # noqa: PLR0913
         self,
-        data: Union[ttb.tensor, ttb.sptensor],
-        function_sampler: Optional[Samplers] = None,
-        function_samples: Optional[Union[int, StratifiedCount]] = None,
-        gradient_sampler: Optional[Samplers] = None,
-        gradient_samples: Optional[Union[int, StratifiedCount]] = None,
+        data: ttb.tensor | ttb.sptensor,
+        function_sampler: Samplers | None = None,
+        function_samples: int | StratifiedCount | None = None,
+        gradient_sampler: Samplers | None = None,
+        gradient_samples: int | StratifiedCount | None = None,
         max_iters: int = 1000,
         over_sample_rate: float = 1.1,
     ):
@@ -110,12 +111,12 @@ class GCPSampler:
 
     def _prepare_function_sampler(  # noqa: PLR0913
         self,
-        data: Union[ttb.tensor, ttb.sptensor],
+        data: ttb.tensor | ttb.sptensor,
         function_sampler: Samplers,
         num_zeros: int,
         num_nonzeros: int,
         over_sample_rate: float,
-        function_samples: Optional[Union[int, StratifiedCount]],
+        function_samples: int | StratifiedCount | None,
     ):
         if function_sampler == Samplers.STRATIFIED:
             if not isinstance(data, ttb.sptensor):
@@ -162,12 +163,12 @@ class GCPSampler:
 
     def _prepare_gradient_sampler(  # noqa: PLR0912,PLR0913
         self,
-        data: Union[ttb.tensor, ttb.sptensor],
+        data: ttb.tensor | ttb.sptensor,
         gradient_sampler: Samplers,
         num_zeros: int,
         num_nonzeros: int,
         over_sample_rate: float,
-        gradient_samples: Optional[Union[int, StratifiedCount]],
+        gradient_samples: int | StratifiedCount | None,
         max_iters: int,
     ):
         if gradient_sampler in (Samplers.STRATIFIED, Samplers.SEMISTRATIFIED):
@@ -224,7 +225,7 @@ class GCPSampler:
                 # NOTE: Must use lambda over partial because we need late binding,
                 # every draw should first uniquely sample num_nonzeros
                 self._gsampler = lambda data: stratified(
-                    data=cast(ttb.sptensor, data),
+                    data=cast("ttb.sptensor", data),
                     nz_idx=xnzidx,
                     num_nonzeros=np.random.poisson(exp_nonzeros),
                     num_zeros=np.random.poisson(exp_zeros),
@@ -236,23 +237,23 @@ class GCPSampler:
         else:
             raise ValueError("Invalid choice for function_sampler")
 
-    def function_sample(self, data: Union[ttb.tensor, ttb.sptensor]) -> sample_type:
-        """Draw a sample from the objective function"""
+    def function_sample(self, data: ttb.tensor | ttb.sptensor) -> sample_type:
+        """Draw a sample from the objective function."""
         return self._fsampler(data)
 
-    def gradient_sample(self, data: Union[ttb.tensor, ttb.sptensor]) -> sample_type:
-        """Draw a sample from the gradient function"""
+    def gradient_sample(self, data: ttb.tensor | ttb.sptensor) -> sample_type:
+        """Draw a sample from the gradient function."""
         return self._gsampler(data)
 
     @property
     def crng(self) -> np.ndarray:
-        """Correction Range for possibly miss-sampled zeros"""
+        """Correction Range for possibly miss-sampled zeros."""
         return self._crng
 
 
 def nonzeros(
     data: ttb.sptensor, samples: int, with_replacement: bool = True
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Sample nonzeros from a sparse tensor.
 
     Parameters
@@ -272,7 +273,7 @@ def nonzeros(
 
     # Select nonzeros
     if samples == nnz:
-        nidx = np.arange(0, nnz)
+        nidx: np.ndarray = np.arange(0, nnz, dtype=int)
     elif with_replacement or samples < nnz:
         nidx = np.random.choice(nnz, size=samples, replace=with_replacement)
     else:
@@ -289,7 +290,7 @@ def zeros(
     over_sample_rate: float = 1.1,
     with_replacement=True,
 ) -> np.ndarray:
-    """Samples zeros from a sparse tensor
+    """Sample zeros from a sparse tensor.
 
     Parameters
     ----------
@@ -372,7 +373,7 @@ def zeros(
 
 
 def uniform(data: ttb.tensor, samples: int) -> sample_type:
-    """Uniformly samples indices from a tensor
+    """Uniformly samples indices from a tensor.
 
     Parameters
     ----------
@@ -397,7 +398,7 @@ def uniform(data: ttb.tensor, samples: int) -> sample_type:
 
 
 def semistrat(data: ttb.sptensor, num_nonzeros: int, num_zeros: int) -> sample_type:
-    """Sample nonzero and zero entries from a sparse tensor
+    """Sample nonzero and zero entries from a sparse tensor.
 
     Parameters
     ----------
@@ -429,13 +430,13 @@ def semistrat(data: ttb.sptensor, num_nonzeros: int, num_zeros: int) -> sample_t
 
 
 def stratified(
-    data: Union[ttb.sptensor, ttb.tensor],
+    data: ttb.sptensor | ttb.tensor,
     nz_idx: np.ndarray,
     num_nonzeros: int,
     num_zeros: int,
     over_sample_rate: float = 1.1,
 ) -> sample_type:
-    """Sample nonzero and zero entries from a sparse tensor
+    """Sample nonzero and zero entries from a sparse tensor.
 
     Parameters
     ----------
@@ -454,9 +455,9 @@ def stratified(
     -------
     Subscripts, values, and weights of samples (Nonzeros then zeros).
     """
-    assert isinstance(
-        data, ttb.sptensor
-    ), "For stratified sampling Sparse Tensor must be provided"
+    assert isinstance(data, ttb.sptensor), (
+        "For stratified sampling Sparse Tensor must be provided"
+    )
     [nonzero_subs, nonzero_vals] = nonzeros(data, num_nonzeros, with_replacement=True)
     nonzero_weights = np.ones((num_nonzeros,))
     if num_nonzeros > 0:

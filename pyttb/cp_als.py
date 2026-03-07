@@ -1,31 +1,31 @@
-"""CP Decomposition via Alternating Least Squares"""
+"""CP Decomposition via Alternating Least Squares."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Literal
 
 import numpy as np
 
 import pyttb as ttb
+from pyttb.pyttb_utils import OneDArray, parse_one_d
 
 
 def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
-    input_tensor: Union[ttb.tensor, ttb.sptensor, ttb.ttensor, ttb.sumtensor],
+    input_tensor: ttb.tensor | ttb.sptensor | ttb.ttensor | ttb.sumtensor,
     rank: int,
     stoptol: float = 1e-4,
     maxiters: int = 1000,
-    dimorder: Optional[List[int]] = None,
-    optdims: Optional[List[int]] = None,
-    init: Union[Literal["random"], Literal["nvecs"], ttb.ktensor] = "random",
+    dimorder: OneDArray | None = None,
+    optdims: OneDArray | None = None,
+    init: Literal["random"] | Literal["nvecs"] | ttb.ktensor = "random",
     printitn: int = 1,
     fixsigns: bool = True,
-) -> Tuple[ttb.ktensor, ttb.ktensor, Dict]:
-    """
-    Compute CP decomposition with alternating least squares
+) -> tuple[ttb.ktensor, ttb.ktensor, dict]:
+    """Compute CP decomposition with alternating least squares.
 
     Parameters
     ----------
@@ -76,7 +76,7 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
 
     Example
     -------
-    Random initialization causes slight pertubation in intermediate results.
+    Random initialization causes slight perturbation in intermediate results.
     `...` is our place holder for these numeric values.
     Example using default values ("random" initialization):
 
@@ -91,7 +91,7 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
      Iter 1: f = ... f-delta = ...
      Final f = ...
     >>> print(M) # doctest: +ELLIPSIS
-    ktensor of shape (2, 2)
+    ktensor of shape (2, 2) with order F
     weights=[108.4715... 8.6114...]
     factor_matrices[0] =
     [[0.4187... 0.3989...]
@@ -100,7 +100,7 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
     [[0.6188... 0.2581...]
      [0.7854... 0.9661...]]
     >>> print(Minit) # doctest: +ELLIPSIS
-    ktensor of shape (2, 2)
+    ktensor of shape (2, 2) with order F
     weights=[1. 1.]
     factor_matrices[0] =
     [[4.1702...e-01 7.2032...e-01]
@@ -109,8 +109,8 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
     [[0.1467... 0.0923...]
      [0.1862... 0.3455...]]
     >>> print(output["params"]) # doctest: +NORMALIZE_WHITESPACE
-    {'stoptol': 0.0001, 'maxiters': 1000, 'dimorder': [0, 1],\
-     'optdims': [0, 1], 'printitn': 1, 'fixsigns': True}
+    {'stoptol': 0.0001, 'maxiters': 1000, 'dimorder': array([0, 1]),\
+     'optdims': array([0, 1]), 'printitn': 1, 'fixsigns': True}
 
     Example using "nvecs" initialization:
 
@@ -128,22 +128,23 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
      Iter 1: f = ... f-delta = ...
      Final f = ...
     """
-
     # Extract number of dimensions and norm of tensor
     N = input_tensor.ndims
     normX = input_tensor.norm()
 
     # Set up dimorder if not specified
     if dimorder is None:
-        dimorder = list(range(N))
-    elif not isinstance(dimorder, list):
-        assert False, "Dimorder must be a list"
-    elif tuple(range(N)) != tuple(sorted(dimorder)):
+        dimorder = np.arange(N)
+    else:
+        dimorder = parse_one_d(dimorder)
+    if tuple(range(N)) != tuple(sorted(dimorder)):
         assert False, "Dimorder must be a list or permutation of range(tensor.ndims)"
 
     # Set up optdims if not specified
     if optdims is None:
-        optdims = list(range(N))
+        optdims = np.arange(N)
+    else:
+        optdims = parse_one_d(optdims)
 
     # Error checking
     assert rank > 0, "Number of components requested must be positive"
@@ -152,9 +153,9 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
     if isinstance(init, ttb.ktensor):
         # User provided an initial ktensor; validate it
         assert init.ndims == N, f"Initial guess does not have {N} modes"
-        assert (
-            init.ncomponents == rank
-        ), f"Initial guess does not have {rank} components"
+        assert init.ncomponents == rank, (
+            f"Initial guess does not have {rank} components"
+        )
         for n in dimorder:
             if init.factor_matrices[n].shape != (input_tensor.shape[n], rank):
                 assert False, f"Mode {n} of the initial guess is the wrong size"
@@ -166,9 +167,9 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
             )
         init = ttb.ktensor(factor_matrices)
     elif isinstance(init, str) and init.lower() == "nvecs":
-        assert not isinstance(
-            input_tensor, ttb.sumtensor
-        ), "Sumtensor doesn't support nvecs"
+        assert not isinstance(input_tensor, ttb.sumtensor), (
+            "Sumtensor doesn't support nvecs"
+        )
         factor_matrices = []
         for n in range(N):
             factor_matrices.append(input_tensor.nvecs(n, rank))
@@ -182,7 +183,7 @@ def cp_als(  # noqa: PLR0912,PLR0913,PLR0915
 
     # Reduce dimorder to only those modes we will optimize
     dimorder_in = dimorder  # save for output
-    dimorder = [d for d in dimorder if d in optdims]
+    dimorder = [int(d) for d in dimorder if d in optdims]
 
     # Store the last MTTKRP result to accelerate fitness computation
     U_mttkrp = np.zeros((input_tensor.shape[dimorder[-1]], rank))

@@ -1,6 +1,7 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import copy
 
@@ -8,58 +9,9 @@ import numpy as np
 import pytest
 
 import pyttb as ttb
+from tests.test_utils import assert_consistent_order
 
 np.set_printoptions(precision=16)
-
-
-@pytest.fixture()
-def sample_ktensor_2way():
-    weights = np.array([1.0, 2.0])
-    fm0 = np.array([[1.0, 2.0], [3.0, 4.0]])
-    fm1 = np.array([[5.0, 6.0], [7.0, 8.0]])
-    factor_matrices = [fm0, fm1]
-    data = {"weights": weights, "factor_matrices": factor_matrices}
-    ktensorInstance = ttb.ktensor(factor_matrices, weights)
-    return data, ktensorInstance
-
-
-@pytest.fixture()
-def sample_ktensor_3way():
-    rank = 2
-    shape = (2, 3, 4)
-    vector = np.arange(1, rank * sum(shape) + 1).astype(float)
-    weights = 2 * np.ones(rank).astype(float)
-    vector_with_weights = np.concatenate((weights, vector), axis=0)
-    # vector_with_weights = vector_with_weights.reshape((len(vector_with_weights), 1))
-    # ground truth
-    fm0 = np.array([[1.0, 3.0], [2.0, 4.0]])
-    fm1 = np.array([[5.0, 8.0], [6.0, 9.0], [7.0, 10.0]])
-    fm2 = np.array([[11.0, 15.0], [12.0, 16.0], [13.0, 17.0], [14.0, 18.0]])
-    factor_matrices = [fm0, fm1, fm2]
-    data = {
-        "weights": weights,
-        "factor_matrices": factor_matrices,
-        "vector": vector,
-        "vector_with_weights": vector_with_weights,
-        "shape": shape,
-    }
-    ktensorInstance = ttb.ktensor(factor_matrices, weights)
-    return data, ktensorInstance
-
-
-@pytest.fixture()
-def sample_ktensor_symmetric():
-    weights = np.array([1.0, 1.0])
-    fm0 = np.array(
-        [[2.340431417384394, 4.951967353890655], [4.596069112758807, 8.012451489774961]]
-    )
-    fm1 = np.array(
-        [[2.340431417384394, 4.951967353890655], [4.596069112758807, 8.012451489774961]]
-    )
-    factor_matrices = [fm0, fm1]
-    data = {"weights": weights, "factor_matrices": factor_matrices}
-    ktensorInstance = ttb.ktensor(factor_matrices, weights)
-    return data, ktensorInstance
 
 
 def test_ktensor_init(sample_ktensor_2way):
@@ -111,7 +63,7 @@ def test_ktensor_init(sample_ktensor_2way):
     # 'factor_matrices' must be a list
     with pytest.raises(AssertionError) as excinfo:
         ttb.ktensor(np.ones((2, 2)), np.array([2.0]))
-    assert "Input 'factor_matrices' must be a list." in str(excinfo)
+    assert "Input 'factor_matrices' must be a sequence." in str(excinfo)
 
     # each factor matrix should be a np.ndarray
     with pytest.raises(AssertionError) as excinfo:
@@ -177,7 +129,7 @@ def test_ktensor_from_vector(sample_ktensor_3way):
     assert np.array_equal(K1.factor_matrices[2], data["factor_matrices"][2])
 
     # data as a row vector will work, but will be transposed
-    transposed_data = data["vector"].copy().reshape((1, len(data["vector"])))
+    transposed_data = data["vector"].copy("K").reshape((1, len(data["vector"])))
     K2 = ttb.ktensor.from_vector(transposed_data, data["shape"], False)
     assert np.array_equal(K2.weights, np.ones((2,)))
     assert np.array_equal(K2.factor_matrices[0], data["factor_matrices"][0])
@@ -212,7 +164,7 @@ def test_ktensor_arrange(sample_ktensor_2way):
     assert np.linalg.norm(K1.factor_matrices[0] - fm0) < 1e-8
     assert np.linalg.norm(K1.factor_matrices[1] - fm1) < 1e-8
 
-    # error, cannot shoft weight and permute simultaneously
+    # error, cannot shift weight and permute simultaneously
     with pytest.raises(AssertionError) as excinfo:
         K1.arrange(weight_factor=0, permutation=p)
     assert (
@@ -255,7 +207,10 @@ def test_ktensor__deepcopy__(sample_ktensor_2way):
 
 def test_ktensor_double(sample_ktensor_2way, sample_ktensor_3way):
     (data2, K2) = sample_ktensor_2way
-    assert np.array_equal(K2.double(), np.array([[29.0, 39.0], [63.0, 85.0]]))
+    double_tensor = K2.double()
+    assert np.array_equal(double_tensor, np.array([[29.0, 39.0], [63.0, 85.0]]))
+    assert_consistent_order(K2, double_tensor)
+
     (data3, K3) = sample_ktensor_3way
     A = np.array(
         [
@@ -285,7 +240,9 @@ def test_ktensor_double(sample_ktensor_2way, sample_ktensor_3way):
             1832.0,
         ]
     ).reshape((2, 3, 4))
-    assert np.array_equal(K3.double(), A)
+    double_tensor = K3.double()
+    assert np.array_equal(double_tensor, A)
+    assert_consistent_order(K3, double_tensor)
 
 
 def test_ktensor_extract(sample_ktensor_3way):
@@ -301,7 +258,7 @@ def test_ktensor_extract(sample_ktensor_3way):
     K_extracted = K.extract(1)
     assert K_new.isequal(K_extracted)
     # tuple
-    K_extracted = K.extract((1))
+    K_extracted = K.extract(1)
     assert K_new.isequal(K_extracted)
     # list
     K_extracted = K.extract([1])
@@ -331,7 +288,7 @@ def test_ktensor_extract(sample_ktensor_3way):
 
     # component index out of range
     with pytest.raises(AssertionError) as excinfo:
-        K.extract((5))
+        K.extract(5)
     assert "Invalid component indices to be extracted: [5] not in range(2)" in str(
         excinfo
     )
@@ -459,7 +416,7 @@ def test_ktensor_issymetric(sample_ktensor_2way, sample_ktensor_symmetric):
     assert np.array_equal(diffs, np.array([[0.0, 8.0], [0.0, 0]]))
 
     # should be symmetric
-    (datas, K1) = sample_ktensor_symmetric
+    _, K1 = sample_ktensor_symmetric
     assert K1.issymmetric()
     issym1, diffs1 = K1.issymmetric(return_diffs=True)
     assert np.array_equal(diffs1, np.array([[0.0, 0.0], [0.0, 0]]))
@@ -474,7 +431,9 @@ def test_ktensor_issymetric(sample_ktensor_2way, sample_ktensor_symmetric):
 def test_ktensor_mask(sample_ktensor_2way):
     (data, K) = sample_ktensor_2way
     W = ttb.tensor(np.array([[0, 1], [1, 0]]))
-    assert np.array_equal(K.mask(W), np.array([[63], [39]]))
+    mask_array = K.mask(W)
+    assert np.array_equal(mask_array, np.array([[63], [39]]))
+    assert_consistent_order(K, mask_array)
 
     # Mask too large
     with pytest.raises(AssertionError) as excinfo:
@@ -488,7 +447,10 @@ def test_ktensor_mttkrp(sample_ktensor_3way):
     output0 = np.array(
         [[12492.0, 12492.0, 12492.0, 12492.0], [17856.0, 17856.0, 17856.0, 17856.0]]
     )
-    assert np.array_equal(K.mttkrp(K1.factor_matrices, 0), output0)
+    mttkrp_result = K.mttkrp(K1.factor_matrices, 0)
+    assert np.array_equal(mttkrp_result, output0)
+    assert_consistent_order(K1, mttkrp_result)
+
     output1 = np.array(
         [
             [8892.0, 8892.0, 8892.0, 8892],
@@ -496,7 +458,10 @@ def test_ktensor_mttkrp(sample_ktensor_3way):
             [11340.0, 11340.0, 11340.0, 11340],
         ]
     )
-    assert np.array_equal(K.mttkrp(K1.factor_matrices, 1), output1)
+    mttkrp_result = K.mttkrp(K1.factor_matrices, 1)
+    assert np.array_equal(mttkrp_result, output1)
+    assert_consistent_order(K, mttkrp_result)
+
     output2 = np.array(
         [
             [6858.0, 6858.0, 6858.0, 6858],
@@ -505,7 +470,9 @@ def test_ktensor_mttkrp(sample_ktensor_3way):
             [8316.0, 8316.0, 8316.0, 8316],
         ]
     )
-    assert np.array_equal(K.mttkrp(K1.factor_matrices, 2), output2)
+    mttkrp_result = K.mttkrp(K1.factor_matrices, 2)
+    assert np.array_equal(mttkrp_result, output2)
+    assert_consistent_order(K, mttkrp_result)
 
     # Wrong number of factor matrices
     fm_wrong_size = [
@@ -517,15 +484,12 @@ def test_ktensor_mttkrp(sample_ktensor_3way):
     with pytest.raises(AssertionError) as excinfo:
         K.mttkrp(fm_wrong_size, 0)
     assert "List of factor matrices is the wrong length" in str(excinfo)
-    # Wrong input type
-    fm_wrong_type = (
-        K1.factor_matrices[0],
-        K1.factor_matrices[0],
-        K1.factor_matrices[0],
-    )
+
     with pytest.raises(AssertionError) as excinfo:
-        K.mttkrp(fm_wrong_type, 0)
-    assert "Second argument must be list of numpy.ndarray's" in str(excinfo)
+        K.mttkrp(5, 0)
+    assert "Second argument must be a sequence of numpy.ndarray's or a ktensor" in str(
+        excinfo
+    )
 
 
 def test_ktensor_ncomponents(sample_ktensor_2way):
@@ -722,11 +686,15 @@ def test_ktensor_normalize(sample_ktensor_2way, sample_ktensor_3way):
 def test_ktensor_nvecs(sample_ktensor_3way):
     (data, K) = sample_ktensor_3way
 
+    nvecs_result = K.nvecs(0, 1)
     assert np.allclose(
-        K.nvecs(0, 1), np.array([[0.5731077440321353], [0.8194800264377384]])
+        nvecs_result, np.array([[0.5731077440321353], [0.8194800264377384]])
     )
+    assert_consistent_order(K, nvecs_result)
+
+    nvecs_result = K.nvecs(0, 2)
     assert np.allclose(
-        K.nvecs(0, 2),
+        nvecs_result,
         np.array(
             [
                 [0.5731077440321353, 0.8194800264377384],
@@ -734,13 +702,18 @@ def test_ktensor_nvecs(sample_ktensor_3way):
             ]
         ),
     )
+    assert_consistent_order(K, nvecs_result)
 
+    nvecs_result = K.nvecs(1, 1)
     assert np.allclose(
-        K.nvecs(1, 1),
+        nvecs_result,
         np.array([[0.5048631426517823], [0.5745404391632514], [0.6442177356747206]]),
     )
+    assert_consistent_order(K, nvecs_result)
+
+    nvecs_result = K.nvecs(1, 2)
     assert np.allclose(
-        K.nvecs(1, 2),
+        nvecs_result,
         np.array(
             [
                 [0.5048631426517821, 0.7605567306550753],
@@ -749,9 +722,11 @@ def test_ktensor_nvecs(sample_ktensor_3way):
             ]
         ),
     )
+    assert_consistent_order(K, nvecs_result)
 
+    nvecs_result = K.nvecs(2, 1)
     assert np.allclose(
-        K.nvecs(2, 1),
+        nvecs_result,
         np.array(
             [
                 [0.4507198734531968],
@@ -761,8 +736,11 @@ def test_ktensor_nvecs(sample_ktensor_3way):
             ]
         ),
     )
+    assert_consistent_order(K, nvecs_result)
+
+    nvecs_result = K.nvecs(2, 2)
     assert np.allclose(
-        K.nvecs(2, 2),
+        nvecs_result,
         np.array(
             [
                 [0.4507198734531969, 0.7048770074600103],
@@ -772,6 +750,7 @@ def test_ktensor_nvecs(sample_ktensor_3way):
             ]
         ),
     )
+    assert_consistent_order(K, nvecs_result)
 
     # Test for r >= N-1, requires cast to dense
     K.nvecs(1, 3)
@@ -801,23 +780,27 @@ def test_ktensor_redistribute(sample_ktensor_2way):
 
 def test_ktensor_score():
     A = ttb.ktensor(
-        [np.ones((3, 3)), np.ones((4, 3)), np.ones((5, 3))], np.array([2.0, 1.0, 3.0])
+        [np.ones((3, 3)) + 0.1, np.ones((4, 3)) + 0.2, np.ones((5, 3)) + 0.3],
+        np.array([2.0, 1.0, 3.0]),
     )
     B = ttb.ktensor(
-        [np.ones((3, 2)), np.ones((4, 2)), np.ones((5, 2))], np.array([2.0, 4.0])
+        [np.ones((3, 2)) + 0.1, np.ones((4, 2)) + 0.2, np.ones((5, 2)) + 0.3],
+        np.array([2.0, 4.0]),
     )
+
+    A_norm = A.copy().normalize()
 
     # defaults
     score, Aperm, flag, best_perm = A.score(B)
-    assert score == 0.875
-    assert np.allclose(Aperm.weights, np.array([15.49193338, 23.23790008, 7.74596669]))
+    assert np.isclose(score, 0.875)
+    assert np.allclose(Aperm.weights, A_norm.weights[best_perm])
     assert flag
     assert np.array_equal(best_perm, np.array([0, 2, 1]))
 
     # compare just factor matrices (i.e., do not use weights)
     score, Aperm, flag, best_perm = A.score(B, weight_penalty=False)
-    assert score == 1.0
-    assert np.allclose(Aperm.weights, np.array([15.49193338, 7.74596669, 23.23790008]))
+    assert np.isclose(score, 1.0)
+    assert np.allclose(Aperm.weights, A_norm.weights[best_perm])
     assert not flag
     assert np.array_equal(best_perm, np.array([0, 1, 2]))
 
@@ -852,7 +835,7 @@ def test_ktensor_score():
         score, Aperm, flag, best_perm = A.score(B)
     assert "Size mismatch" in str(excinfo)
 
-    # invalid: number of compnents of first ktensor must be greater than or
+    # invalid: number of components of first ktensor must be greater than or
     # equal to number of components of second ktensor
     with pytest.raises(AssertionError) as excinfo:
         B = ttb.ktensor(
@@ -984,8 +967,13 @@ def test_ktensor_tolist(sample_ktensor_3way):
 
 def test_ktensor_tovec(sample_ktensor_3way):
     (data, K0) = sample_ktensor_3way
-    assert np.array_equal(data["vector_with_weights"], K0.tovec())
-    assert np.array_equal(data["vector"], K0.tovec(include_weights=False))
+    tovec_result = K0.tovec()
+    assert np.array_equal(data["vector_with_weights"], tovec_result)
+    assert_consistent_order(K0, tovec_result)
+
+    tovec_result = K0.tovec(include_weights=False)
+    assert np.array_equal(data["vector"], tovec_result)
+    assert_consistent_order(K0, tovec_result)
 
 
 def test_ktensor_ttv(sample_ktensor_3way):
@@ -1196,7 +1184,7 @@ def test_ktensor__sub__(sample_ktensor_2way, sample_ktensor_3way):
     assert "Cannot subtract instance of this type from a ktensor" in str(excinfo)
 
 
-def test_ktensor__mul__(sample_ktensor_2way, sample_ktensor_3way):
+def test_ktensor__mul__(sample_ktensor_2way):
     (data0, K0) = sample_ktensor_2way
     K1 = 2 * K0
     assert np.array_equal(2 * data0["weights"], K1.weights)
@@ -1231,5 +1219,5 @@ def test_ktensor__mul__(sample_ktensor_2way, sample_ktensor_3way):
 
 def test_ktensor__str__(sample_ktensor_2way):
     (data0, K0) = sample_ktensor_2way
-    s = """ktensor of shape (2, 2)\nweights=[1. 2.]\nfactor_matrices[0] =\n[[1. 2.]\n [3. 4.]]\nfactor_matrices[1] =\n[[5. 6.]\n [7. 8.]]"""
+    s = """ktensor of shape (2, 2) with order F\nweights=[1. 2.]\nfactor_matrices[0] =\n[[1. 2.]\n [3. 4.]]\nfactor_matrices[1] =\n[[5. 6.]\n [7. 8.]]"""
     assert K0.__str__() == s

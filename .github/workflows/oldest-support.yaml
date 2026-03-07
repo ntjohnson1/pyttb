@@ -1,3 +1,7 @@
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
+# LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
+# U.S. Government retains certain rights in this software.
+
 # This should mirror regression tests. Ideally we find a way in the future to fold the two together
 
 name: Test Oldest Dependencies
@@ -29,7 +33,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'  # Find a way to globally define our minimum python once
+          python-version: '3.10'  # Find a way to globally define our minimum python once
 
       - name: Install dependencies with minimum versions
         run: |

@@ -1,7 +1,9 @@
-pyttb.tucker_als
-========================
+Tucker Alternating Least Squares (:obj:`pyttb.tucker_als`)
+==========================================================
 
-.. automodule:: pyttb.tucker_als
-    :members:
-    :undoc-members:
-    :show-inheritance:
+For *all* examples in this document, the following module imports are assumed::
+
+    >>> import pyttb as ttb
+    >>> import numpy as np
+
+.. autofunction:: pyttb.tucker_als

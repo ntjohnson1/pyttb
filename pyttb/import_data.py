@@ -1,24 +1,24 @@
-"""Utilities for importing tensor data"""
+"""Utilities for importing tensor data."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
 import os
-from typing import TextIO, Tuple, Union
+from typing import TextIO
 
 import numpy as np
 
 import pyttb as ttb
+from pyttb.pyttb_utils import to_memory_order
 
 
 def import_data(
     filename: str, index_base: int = 1
-) -> Union[ttb.sptensor, ttb.ktensor, ttb.tensor, np.ndarray]:
-    """
-    Import tensor data
+) -> ttb.sptensor | ttb.ktensor | ttb.tensor | np.ndarray:
+    """Import tensor data.
 
     Parameters
     ----------
@@ -32,7 +32,7 @@ def import_data(
         assert False, f"File path {filename} does not exist."
 
     # import
-    with open(filename, "r") as fp:
+    with open(filename) as fp:
         # tensor type should be on the first line
         # valid: tensor, sptensor, matrix, ktensor
         data_type = import_type(fp)
@@ -66,19 +66,19 @@ def import_data(
                 fp.readline().strip()  # Skip factor type
                 fac_shape = import_shape(fp)
                 fac = import_array(fp, np.prod(fac_shape))
-                fac = np.reshape(fac, np.array(fac_shape))
+                fac = to_memory_order(np.reshape(fac, np.array(fac_shape)), order="F")
                 factor_matrices.append(fac)
             return ttb.ktensor(factor_matrices, weights, copy=False)
     raise ValueError("Failed to load tensor data")  # pragma: no cover
 
 
 def import_type(fp: TextIO) -> str:
-    """Extract IO data type"""
+    """Extract IO data type."""
     return fp.readline().strip().split(" ")[0]
 
 
-def import_shape(fp: TextIO) -> Tuple[int, ...]:
-    """Extract the shape of something from a file"""
+def import_shape(fp: TextIO) -> tuple[int, ...]:
+    """Extract the shape of something from a file."""
     n = int(fp.readline().strip().split(" ")[0])
     shape = [int(d) for d in fp.readline().strip().split(" ")]
     if len(shape) != n:
@@ -87,28 +87,29 @@ def import_shape(fp: TextIO) -> Tuple[int, ...]:
 
 
 def import_nnz(fp: TextIO) -> int:
-    """Extract the number of non-zeros of something from a file"""
+    """Extract the number of non-zeros of something from a file."""
     return int(fp.readline().strip().split(" ")[0])
 
 
 def import_rank(fp: TextIO) -> int:
-    """Extract the rank of something from a file"""
+    """Extract the rank of something from a file."""
     return int(fp.readline().strip().split(" ")[0])
 
 
 def import_sparse_array(
     fp: TextIO, n: int, nz: int, index_base: int = 1
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Extract sparse data subs and vals from coordinate format data"""
-    subs = np.zeros((nz, n), dtype="int64")
-    vals = np.zeros((nz, 1))
-    for k in range(nz):
-        line = fp.readline().strip().split(" ")
-        subs[k, :] = [np.int64(i) - index_base for i in line[:-1]]
-        vals[k, 0] = line[-1]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Extract sparse data subs and vals from coordinate format data."""
+    data = np.loadtxt(fp)
+    subs = data[:, :-1].astype("int64") - index_base
+    vals = data[:, -1].reshape(-1, 1)
+    if subs.shape[0] != nz:
+        raise ValueError("Imported nonzeros are not of expected size")
+    if subs.shape[1] != n:
+        raise ValueError("Imported tensor is not of expected shape")
     return subs, vals
 
 
-def import_array(fp: TextIO, n: Union[int, np.integer]) -> np.ndarray:
-    """Extract numpy array from file"""
+def import_array(fp: TextIO, n: int | np.integer) -> np.ndarray:
+    """Extract numpy array from file."""
     return np.fromfile(fp, count=n, sep=" ")

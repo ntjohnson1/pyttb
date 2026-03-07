@@ -1,79 +1,18 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
+import logging
 from copy import deepcopy
 
 import numpy as np
 import pytest
 
 import pyttb as ttb
+from tests.test_utils import assert_consistent_order
 
 DEBUG_tests = False
-
-
-@pytest.fixture()
-def sample_ndarray_1way():
-    shape = (16,)
-    ndarrayInstance = np.reshape(np.arange(1, 17), shape, order="F")
-    params = {"data": ndarrayInstance, "shape": shape}
-    return params, ndarrayInstance
-
-
-@pytest.fixture()
-def sample_ndarray_2way():
-    shape = (4, 4)
-    ndarrayInstance = np.reshape(np.arange(1, 17), shape, order="F")
-    params = {"data": ndarrayInstance, "shape": shape}
-    return params, ndarrayInstance
-
-
-@pytest.fixture()
-def sample_tensor_3way():
-    data = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
-    shape = (2, 3, 2)
-    params = {"data": np.reshape(data, np.array(shape), order="F"), "shape": shape}
-    tensorInstance = ttb.tensor(data, shape)
-    return params, tensorInstance
-
-
-@pytest.fixture()
-def sample_ndarray_4way():
-    shape = (2, 2, 2, 2)
-    ndarrayInstance = np.reshape(np.arange(1, 17), shape, order="F")
-    params = {"data": ndarrayInstance, "shape": shape}
-    return params, ndarrayInstance
-
-
-@pytest.fixture()
-def sample_tenmat_4way():
-    shape = (4, 4)
-    data = np.reshape(np.arange(1, 17), shape, order="F")
-    tshape = (2, 2, 2, 2)
-    rdims = np.array([0, 1])
-    cdims = np.array([2, 3])
-    tenmatInstance = ttb.tenmat()
-    tenmatInstance.tshape = tshape
-    tenmatInstance.rindices = rdims.copy()
-    tenmatInstance.cindices = cdims.copy()
-    tenmatInstance.data = data.copy()
-    params = {
-        "data": data,
-        "rdims": rdims,
-        "cdims": cdims,
-        "tshape": tshape,
-        "shape": shape,
-    }
-    return params, tenmatInstance
-
-
-@pytest.fixture()
-def sample_tensor_4way():
-    data = np.arange(1, 17)
-    shape = (2, 2, 2, 2)
-    params = {"data": np.reshape(data, np.array(shape), order="F"), "shape": shape}
-    tensorInstance = ttb.tensor(data, shape)
-    return params, tensorInstance
 
 
 def test_tenmat_initialization_empty():
@@ -86,6 +25,7 @@ def test_tenmat_initialization_empty():
     assert (tenmatInstance.rindices == empty).all()
     assert (tenmatInstance.cindices == empty).all()
     assert (tenmatInstance.data == empty).all()
+    assert_consistent_order(tenmatInstance, tenmatInstance.data)
 
 
 def test_tenmat_initialization_from_data(
@@ -107,6 +47,7 @@ def test_tenmat_initialization_from_data(
     assert (tenmatNdarraye.cindices == np.array([])).all()
     assert tenmatNdarraye.shape == ()
     assert tenmatNdarraye.tshape == ()
+    assert_consistent_order(tenmatNdarraye, tenmatNdarraye.data)
 
     # Constructor from 1d array
     tenmatNdarray1 = ttb.tenmat(ndarrayInstance1, rdims, cdims, tshape)
@@ -120,6 +61,7 @@ def test_tenmat_initialization_from_data(
     assert (tenmatNdarray1.cindices == tenmatInstance.cindices).all()
     assert np.prod(tenmatNdarray1.shape) == np.prod(tenmatInstance.shape)
     assert tenmatNdarray1.tshape == tenmatInstance.tshape
+    assert_consistent_order(tenmatNdarray1, tenmatNdarray1.data)
 
     # Constructor from 1d array converted to 2d row vector
     tenmatNdarray1r = ttb.tenmat(
@@ -129,10 +71,12 @@ def test_tenmat_initialization_from_data(
         tshape,
     )
     assert tenmatNdarray1r.isequal(tenmatNdarray1)
+    assert_consistent_order(tenmatNdarray1r, tenmatNdarray1r.data)
 
     # Constructor from 2d array
     tenmatNdarray2 = ttb.tenmat(ndarrayInstance2, rdims, cdims, tshape)
     assert tenmatNdarray2.isequal(tenmatInstance)
+    assert_consistent_order(tenmatNdarray2, tenmatNdarray2.data)
 
     # Reference instead of copy
     tenmatNdarray2 = ttb.tenmat(ndarrayInstance2, rdims, cdims, tshape, copy=False)
@@ -172,12 +116,6 @@ def test_tenmat_initialization_from_data(
     assert exc in str(excinfo)
     with pytest.raises(AssertionError) as excinfo:
         ttb.tenmat(ndarrayInstance1, rdims, cdims, None)
-    assert exc in str(excinfo)
-
-    # tshape is not a tuple
-    exc = "tshape must be a tuple."
-    with pytest.raises(AssertionError) as excinfo:
-        ttb.tenmat(ndarrayInstance2, rdims, cdims, list(tshape))
     assert exc in str(excinfo)
 
     # products of tshape and data.shape do not match
@@ -330,7 +268,7 @@ def test_tenmat_initialization_from_tensor_type(
         assert exc in str(excinfo)
 
 
-def test_tenmat_to_tensor():
+def test_tenmat_to_tensor(caplog):
     tensorInstance = ttb.tenrand((4, 3))
     tensorInstance4 = ttb.tenrand((4, 3, 2, 2))
     # tenmat
@@ -351,8 +289,11 @@ def test_tenmat_to_tensor():
     assert not np.may_share_memory(tensorTenmatInstance4.data, tenmatInstance4.data)
 
     # Reference instead of copy
-    tensorTenmatInstance4_ref = tenmatInstance4.to_tensor(copy=False)
-    assert np.may_share_memory(tensorTenmatInstance4_ref.data, tenmatInstance4.data)
+    with caplog.at_level(logging.WARNING):
+        tensorTenmatInstance4_ref = tenmatInstance4.to_tensor(copy=False)
+        assert not np.may_share_memory(
+            tensorTenmatInstance4_ref.data, tenmatInstance4.data
+        )
 
 
 def test_tenmat_ctranspose(sample_tenmat_4way):
@@ -371,7 +312,14 @@ def test_tenmat_ctranspose(sample_tenmat_4way):
 def test_tenmat_double(sample_tenmat_4way):
     (params, tenmatInstance) = sample_tenmat_4way
 
-    assert (tenmatInstance.double() == tenmatInstance.data.astype(np.float64)).all()
+    double_array = tenmatInstance.double()
+    assert (double_array == tenmatInstance.data.astype(np.float64)).all()
+    assert_consistent_order(tenmatInstance, double_array)
+
+    # Verify immutability
+    double_array = tenmatInstance.double(True)
+    with pytest.raises(ValueError):
+        double_array[0] = 1
 
 
 def test_tenmat_ndims(sample_tenmat_4way):
@@ -649,7 +597,7 @@ def test_tenmat__str__(
     # Empty
     tenmatInstance = ttb.tenmat()
     s = ""
-    s += "matrix corresponding to a tensor of shape ()\n"
+    s += "matrix corresponding to a tensor of shape () with order F\n"
     s += "rindices = [  ] (modes of tensor corresponding to rows)\n"
     s += "cindices = [  ] (modes of tensor corresponding to columns)\n"
     s += "data = []\n"
@@ -661,16 +609,15 @@ def test_tenmat__str__(
     s = ""
     s += "matrix corresponding to a tensor of shape "
     s += str(tenmatInstance.tshape)
-    s += "\n"
+    s += " with order F\n"
     s += "rindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.rindices]) + " ] "
     s += "(modes of tensor corresponding to rows)\n"
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
     ## Test 2D
@@ -678,16 +625,15 @@ def test_tenmat__str__(
     s = ""
     s += "matrix corresponding to a tensor of shape "
     s += str(tenmatInstance.tshape)
-    s += "\n"
+    s += " with order F\n"
     s += "rindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.rindices]) + " ] "
     s += "(modes of tensor corresponding to rows)\n"
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
     # Test 4D
@@ -696,16 +642,15 @@ def test_tenmat__str__(
     s = ""
     s += "matrix corresponding to a tensor of shape "
     s += str(tenmatInstance.tshape)
-    s += "\n"
+    s += " with order F\n"
     s += "rindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.rindices]) + " ] "
     s += "(modes of tensor corresponding to rows)\n"
     s += "cindices = "
     s += "[ " + (", ").join([str(int(d)) for d in tenmatInstance.cindices]) + " ] "
     s += "(modes of tensor corresponding to columns)\n"
-    s += "data[:, :] = \n"
+    s += "data[:, :] =\n"
     s += str(tenmatInstance.data)
-    s += "\n"
     assert s == tenmatInstance.__str__()
 
 

@@ -1,9 +1,59 @@
+# v1.8.4 (2026-01-05)
+- Version Support:
+  - Added support for Python 3.14; dropped support for Python 3.9 (https://github.com/sandialabs/pyttb/pull/459)
+  - Updated support for recent versions of `numpy` and `spicy` (https://github.com/sandialabs/pyttb/pull/471)
+- Added:
+  - Added ability to choose zero-truncated Poisson distribution in `gcp_opt` (https://github.com/sandialabs/pyttb/pull/450)
+  - Added `__radd__` support in `sptensor` (https://github.com/sandialabs/pyttb/pull/461)
+  - Added `index_base` parameter in `export_data` (https://github.com/sandialabs/pyttb/pull/449)
+- Fixed:
+  - Fixed `copy` methods in data classes to use correct layout or underlying data (https://github.com/sandialabs/pyttb/pull/463)
+  - Fixed `tensor` data layout in `import_data` (https://github.com/sandialabs/pyttb/pull/464)
+  - Fixed edge case in testing `gcp_opt` (https://github.com/sandialabs/pyttb/pull/452)
+  - Fixed type handling in `tensor.scale` (https://github.com/sandialabs/pyttb/pull/462)
+- Improved:
+  - Now using `numpy` method for improved performance in `export_data` and `import_data` (https://github.com/sandialabs/pyttb/pull/465)
+- Dev:
+  - Update ruff version used in CI testing (https://github.com/sandialabs/pyttb/pull/446)
+
+# v1.8.3 (2025-08-29)
+- Added:
+  - Added `create_problem` data and solution generator to match TTB for MATLAB (https://github.com/sandialabs/pyttb/pull/442)
+  - Added `immutable` flag to `double` methods for converting to `numpy.ndarray` data (https://github.com/sandialabs/pyttb/pull/432) 
+  - Added `order` checks and inclusion in `__str__ output of data classes (https://github.com/sandialabs/pyttb/pull/373)
+  - Added methods for TTB for MATLAB alignment [e.g., `tensor` printing] (https://github.com/sandialabs/pyttb/pull/360) 
+- Fixed:
+  - Fixed `tenmat` to enforce `order` properly (https://github.com/sandialabs/pyttb/pull/385)
+  - Fixed typing change propagated from `numpy` (https://github.com/sandialabs/pyttb/pull/407)
+  - Fixed divide-by-zero errors in algorithm iteration printing (https://github.com/sandialabs/pyttb/pull/431)
+  - Aligned `ktensor.viz` method name to TTB for MATLAB (https://github.com/sandialabs/pyttb/pull/372)
+  - Fixed `ktensor.viz` problem of changing weights of input when plotting (https://github.com/sandialabs/pyttb/pull/447)
+- Improved:
+  - Changed `tensor.reshape` to avoid making deep copies of data (https://github.com/sandialabs/pyttb/pull/386)
+  - Improved efficiency in `tenrand` to avoid memory layout reordering (https://github.com/sandialabs/pyttb/pull/428)
+  - Improved support on Windows when testing (https://github.com/sandialabs/pyttb/pull/388)
+  - Many documentation improvements
+- Deprecated:
+  - Removed unsupported data classes that consisted solely of stubs (https://github.com/sandialabs/pyttb/pull/432)
+- Dev:
+  - Added link checks, code spelling to pre-commit hooks (https://github.com/sandialabs/pyttb/pull/359)
+  - Removed publishing of coverage results to coveralls for all but earliest supported Python version (https://github.com/sandialabs/pyttb/pull/432)
+
+# v1.8.2 (2025-01-06)
+- Fixed:
+    - Fixed layout and printing issues (https://github.com/sandialabs/pyttb/pull/354)
+    - Fixed tutorial hierarchy (https://github.com/sandialabs/pyttb/pull/343)
+- Improved:
+    - Improved `pyttb_utils` (https://github.com/sandialabs/pyttb/pull/353)
+    - Improved docs for coming from MATLAB (https://github.com/sandialabs/pyttb/pull/352)
+    - Improved shape support in data classes (https://github.com/sandialabs/pyttb/pull/348)
+
 # v1.8.1 (2024-11-11)
 - Fixed: 
   - Aligning comparison operator output for data classes (https://github.com/sandialabs/pyttb/pull/331)
 - Improved:
   - Getting starting documentation (https://github.com/sandialabs/pyttb/pull/324)
-  - Development enviroment (https://github.com/sandialabs/pyttb/pull/329, https://github.com/sandialabs/pyttb/pull/330)
+  - Development environment (https://github.com/sandialabs/pyttb/pull/329, https://github.com/sandialabs/pyttb/pull/330)
   - Documentation (https://github.com/sandialabs/pyttb/pull/328, https://github.com/sandialabs/pyttb/pull/334)
 
 # v1.8.0 (2024-10-23)
@@ -84,7 +134,7 @@
     - Addresses ambiguity of -0 by using `exclude_dims` (`numpy.ndarray`) parameter
   - `ktensor.ttv`, `sptensor.ttv`, `tensor.ttv`, `ttensor.ttv`
     - Use `exlude_dims` parameter instead of `-dims`
-    - Explicit nameing of dimensions to exclude
+    - Explicit naming of dimensions to exclude
   - `tensor.ttsv`
     - Use `skip_dim` (`int`) parameter instead of `-dims`
     - Exclude all dimensions up to and including `skip_dim`

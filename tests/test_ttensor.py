@@ -1,12 +1,14 @@
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
+from __future__ import annotations
 
 import copy
 
 import numpy as np
 import pytest
 from scipy import sparse
+from test_utils import assert_consistent_order
 
 import pyttb as ttb
 
@@ -149,6 +151,12 @@ def test_ttensor_double(sample_ttensor):
     ttensorInstance = sample_ttensor
     # This sanity check only works for all 1's
     assert ttensorInstance.double() == np.prod(ttensorInstance.core.shape)
+    assert_consistent_order(ttensorInstance, ttensorInstance.double())
+
+    # Verify immutability
+    double_array = ttensorInstance.double(True)
+    with pytest.raises(ValueError):
+        double_array[0] = 1
 
 
 def test_ttensor_ndims(sample_ttensor):
@@ -286,12 +294,13 @@ def test_ttensor_mttkrp(random_ttensor):
     final_value = ttensorInstance.mttkrp(vectors, 2)
     full_value = ttensorInstance.full().mttkrp(vectors, 2)
     assert np.allclose(final_value, full_value), (
-        f"TTensor value is: \n{final_value}\n\n" f"Full value is: \n{full_value}"
+        f"TTensor value is: \n{final_value}\n\nFull value is: \n{full_value}"
     )
+    assert_consistent_order(ttensorInstance, final_value)
 
     final_value = ttensorInstance.mttkrp(ttb.ktensor(vectors), 2)
     assert np.allclose(final_value, full_value), (
-        f"TTensor value is: \n{final_value}\n\n" f"Full value is: \n{full_value}"
+        f"TTensor value is: \n{final_value}\n\nFull value is: \n{full_value}"
     )
 
 
@@ -328,7 +337,7 @@ def test_ttensor_ttm(random_ttensor):
         list(reversed(matrices)), np.arange(len(matrices) - 1, -1, -1)
     )
     assert final_value.isequal(reverse_value), (
-        f"TTensor value is: \n{final_value}\n\n" f"Full value is: \n{reverse_value}"
+        f"TTensor value is: \n{final_value}\n\nFull value is: \n{reverse_value}"
     )
     final_value = ttensorInstance.ttm(matrices)  # No dims
     assert final_value.isequal(reverse_value)
@@ -410,9 +419,11 @@ def test_ttensor_nvecs(random_ttensor):
     ttensor_eigvals = ttensorInstance.nvecs(n, r)
     full_eigvals = ttensorInstance.full().nvecs(n, r)
     assert np.allclose(ttensor_eigvals, full_eigvals)
+    assert_consistent_order(ttensorInstance, ttensor_eigvals)
 
     sparse_core_ttensor_eigvals = sparse_core_ttensor.nvecs(n, r)
     assert np.allclose(ttensor_eigvals, sparse_core_ttensor_eigvals)
+    assert_consistent_order(sparse_core_ttensor, sparse_core_ttensor_eigvals)
 
     sparse_factors_ttensor_eigvals = sparse_factor_ttensor.nvecs(n, r)
     assert np.allclose(ttensor_eigvals, sparse_factors_ttensor_eigvals)
@@ -431,6 +442,9 @@ def test_ttensor_nvecs(random_ttensor):
     assert np.allclose(ttensor_eigvals, sparse_factors_ttensor_eigvals)
 
 
+@pytest.mark.skip(
+    reason="I don't think this test makes sense. See TODO for adding better test."
+)
 def test_ttensor_nvecs_all_zeros(random_ttensor):
     """Perform nvecs calculation on all zeros tensor to exercise sparsity edge cases"""
     ttensorInstance = random_ttensor

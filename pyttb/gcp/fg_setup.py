@@ -1,13 +1,13 @@
-"""Prepare Function and Gradient Handles for GCP OPT"""
+"""Prepare Function and Gradient Handles for GCP OPT."""
 
-# Copyright 2024 National Technology & Engineering Solutions of Sandia,
+# Copyright 2025 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from functools import partial
-from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 
@@ -16,15 +16,15 @@ from pyttb.gcp import handles
 from pyttb.gcp.handles import Objectives
 
 function_type = Callable[[np.ndarray, np.ndarray], np.ndarray]
-fg_return = Tuple[function_type, function_type, float]
+fg_return = tuple[function_type, function_type, float]
 
 
 def setup(  # noqa: PLR0912,PLR0915
     objective: Objectives,
-    data: Optional[Union[ttb.tensor, ttb.sptensor]] = None,
-    additional_parameter: Optional[float] = None,
+    data: ttb.tensor | ttb.sptensor | None = None,
+    additional_parameter: float | None = None,
 ) -> fg_return:
-    """Collects the function and gradient handles for GCP
+    """Collect the function and gradient handles for GCP.
 
     Parameters
     ----------
@@ -109,28 +109,34 @@ def setup(  # noqa: PLR0912,PLR0915
         function_handle = partial(handles.beta, b=additional_parameter)
         gradient_handle = partial(handles.beta_grad, b=additional_parameter)
         lower_bound = 0
+    elif objective == Objectives.ZT_POISSON:
+        if data is not None and not valid_natural(data):
+            raise ValueError(f"{objective.name} requires a count tensor")
+        function_handle = handles.ztp
+        gradient_handle = handles.ztp_grad
+        lower_bound = 0.0
     else:
         raise ValueError(f" Unknown objective: {objective}")
 
     return function_handle, gradient_handle, lower_bound
 
 
-def valid_nonneg(data: Union[ttb.tensor, ttb.sptensor]) -> bool:
-    """Check if provided data is valid non-negative tensor"""
+def valid_nonneg(data: ttb.tensor | ttb.sptensor) -> bool:
+    """Check if provided data is valid non-negative tensor."""
     if isinstance(data, ttb.sptensor):
         return bool(np.all(data.vals > 0))
     return bool(np.all(data.data > 0))
 
 
-def valid_binary(data: Union[ttb.tensor, ttb.sptensor]) -> bool:
-    """Check if provided data is valid binary tensor"""
+def valid_binary(data: ttb.tensor | ttb.sptensor) -> bool:
+    """Check if provided data is valid binary tensor."""
     if isinstance(data, ttb.sptensor):
         return bool(np.all(data.vals == 1))
     return bool(np.all(np.isin(np.unique(data.data), [0, 1])))
 
 
-def valid_natural(data: Union[ttb.tensor, ttb.sptensor]) -> bool:
-    """Check if provided data is valid natural number tensor"""
+def valid_natural(data: ttb.tensor | ttb.sptensor) -> bool:
+    """Check if provided data is valid natural number tensor."""
     if isinstance(data, ttb.sptensor):
         vals = data.vals
     else:
