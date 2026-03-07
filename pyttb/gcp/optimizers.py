@@ -469,7 +469,7 @@ class LBFGSB_Base:
             if value is not None
         }
 
-    def _run_solver(
+    def _run_solver(  # noqa: PLR0913
         self,
         initial_model: ttb.ktensor,
         data: ttb.tensor,
@@ -494,7 +494,7 @@ class LBFGSB_Base:
 
         x0 = model.tovec(False)
         if "pgtol" not in self._solver_kwargs:
-            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(shape)
+            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(data.shape)
 
         # Set callback function that returns time trace by default
         monitor = Monitor(
@@ -521,7 +521,7 @@ class LBFGSB_Base:
 
 
 class LBFGSB(LBFGSB_Base):
-    """Simple wrapper around scipy lbfgsb
+    """Simple wrapper around scipy lbfgsb.
 
     NOTE: If used for publications please see scipy documentation for adding citation
     for the implementation.
@@ -533,9 +533,9 @@ class LBFGSB(LBFGSB_Base):
         data: ttb.tensor,
         function_handle: function_type,
         gradient_handle: function_type,
-        mask: Optional[np.ndarray],
-    ) -> Callable[[np.ndarray], Tuple[float, np.ndarray]]:
-        def lbfgsb_func_grad(vector: np.ndarray) -> Tuple[float, np.ndarray]:
+        mask: np.ndarray | None,
+    ) -> Callable[[np.ndarray], tuple[float, np.ndarray]]:
+        def lbfgsb_func_grad(vector: np.ndarray) -> tuple[float, np.ndarray]:
             model.update(np.arange(model.ndims), vector)
             func_val, grads = evaluate(
                 model,
@@ -555,9 +555,9 @@ class LBFGSB(LBFGSB_Base):
         function_handle: function_type,
         gradient_handle: function_type,
         lower_bound: float = -np.inf,
-        mask: Optional[np.ndarray] = None,
-    ) -> Tuple[ttb.ktensor, Dict]:
-        """Solves the defined optimization problem"""
+        mask: np.ndarray | None = None,
+    ) -> tuple[ttb.ktensor, dict]:
+        """Solves the defined optimization problem."""
         model = initial_model.copy()
 
         lbfgsb_func_grad = self._get_lbfgsb_func_grad(
@@ -579,10 +579,11 @@ class LBFGSB(LBFGSB_Base):
 
 class Monitor(dict):
     """Monitor LBFGSB Timings."""
+
     def __init__(
         self,
         maxiter: int,
-        callback: Optional[Callable[[np.ndarray], None]] = None,  # type: ignore
+        callback: Callable[[np.ndarray], None] | None = None,  # type: ignore
     ):
         self.startTime = time.perf_counter()
         self.time_trace = np.zeros((maxiter,))
@@ -590,6 +591,7 @@ class Monitor(dict):
         self._callback = callback
 
     def __call__(self, xk: np.ndarray) -> None:
+        """Update monitor."""
         if self._callback is not None:
             self._callback(xk)
         self.time_trace[self.iter] = time.perf_counter() - self.startTime
@@ -597,10 +599,12 @@ class Monitor(dict):
 
     @property
     def callback(self):
+        """Return stored callback."""
         return self._callback
 
     @property
     def __dict__(self):
+        """Monitor entries."""
         if not self._callback:
             return {"time_trace": self.time_trace}
         else:

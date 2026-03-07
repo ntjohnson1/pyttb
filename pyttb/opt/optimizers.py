@@ -1,4 +1,4 @@
-"""Optimizer Implementations for CP OPT"""
+"""Optimizer Implementations for CP OPT."""
 
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
@@ -6,18 +6,39 @@
 
 from __future__ import annotations
 
-from typing import Callable, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 import pyttb as ttb
 from pyttb.gcp.optimizers import LBFGSB_Base
-from pyttb.opt.fg_setup import function_type, gradient_type
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pyttb.opt.fg_setup import function_type, gradient_type
 
 
 def evaluate(
     model, data, function_handle, gradient_handle
-) -> Tuple[float, List[np.ndarray]]:
+) -> tuple[float, list[np.ndarray]]:
+    """Evaluate an objective function and/or gradient function.
+
+    Parameters
+    ----------
+    model:
+        Current decomposition.
+    data:
+        Source tensor to decompose.
+    function_handle:
+        Objective function.
+    gradient_handle:
+        Gradient definition.
+
+    Returns
+    -------
+    Objective function value and/or gradient function value with respect to model.
+    """
     F = function_handle(model, data)
     G = gradient_handle(model, data)
     return F, G
@@ -25,7 +46,7 @@ def evaluate(
 
 # If we use more scipy optimizers in the future we should generalize this
 class LBFGSB(LBFGSB_Base):
-    """Simple wrapper around scipy lbfgsb
+    """Simple wrapper around scipy lbfgsb.
 
     NOTE: If used for publications please see scipy documentation for adding citation
     for the implementation.
@@ -34,11 +55,11 @@ class LBFGSB(LBFGSB_Base):
     def _get_lbfgsb_func_grad(
         self,
         model: ttb.ktensor,
-        data: Union[ttb.tensor, ttb.sptensor],
+        data: ttb.tensor | ttb.sptensor,
         function_handle: function_type,
         gradient_handle: gradient_type,
-    ) -> Callable[[np.ndarray], Tuple[float, np.ndarray]]:
-        def lbfgsb_func_grad(vector: np.ndarray) -> Tuple[float, np.ndarray]:
+    ) -> Callable[[np.ndarray], tuple[float, np.ndarray]]:
+        def lbfgsb_func_grad(vector: np.ndarray) -> tuple[float, np.ndarray]:
             model.update(np.arange(model.ndims), vector)
             func_val, grads = evaluate(
                 model,
@@ -53,13 +74,12 @@ class LBFGSB(LBFGSB_Base):
     def solve(
         self,
         initial_model: ttb.ktensor,
-        data: Union[ttb.tensor, ttb.sptensor],
+        data: ttb.tensor | ttb.sptensor,
         function_handle: function_type,
         gradient_handle: gradient_type,
         lower_bound: float = -np.inf,
-    ) -> Tuple[ttb.ktensor, Dict]:
-        """Solves the defined optimization problem"""
-
+    ) -> tuple[ttb.ktensor, dict]:
+        """Solves the defined optimization problem."""
         model = initial_model.copy()
 
         lbfgsb_func_grad = self._get_lbfgsb_func_grad(
