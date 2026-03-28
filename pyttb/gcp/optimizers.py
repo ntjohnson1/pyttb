@@ -469,15 +469,19 @@ class LBFGSB_Base:
             if value is not None
         }
 
-    def _run_solver(  # noqa: PLR0913
+    def _run_solver(
         self,
-        x0: np.ndarray,
-        model: ttb.ktensor,
-        lbfgsb_func_grad: Callable[[np.ndarray], Tuple[float, np.ndarray]],
-        lower_bound: float,
-        shape: Tuple[int, ...],
-    ) -> Tuple[ttb.ktensor, Dict]:
+        initial_model: ttb.ktensor,
+        data: ttb.tensor | ttb.sptensor,
+        lbfgsb_func_grad: Callable[[np.ndarray], tuple[float, np.ndarray]],
+        lower_bound: float = -np.inf,
+    ) -> tuple[ttb.ktensor, dict]:
+        """Solves the defined optimization problem."""
+        model = initial_model.copy()
+
+        x0 = model.tovec(False)
         if "pgtol" not in self._solver_kwargs:
+            # TODO is this all we need data for?
             self._solver_kwargs["pgtol"] = 1e-4 * np.prod(data.shape)
 
         # Set callback function that returns time trace by default
@@ -552,9 +556,11 @@ class LBFGSB(LBFGSB_Base):
             mask,
         )
 
-        x0 = model.tovec(False)
         model, lbfgsb_info = self._run_solver(
-            x0, model, lbfgsb_func_grad, lower_bound, data.shape
+            model,
+            data,
+            lbfgsb_func_grad,
+            lower_bound,
         )
 
         # TODO big print output
