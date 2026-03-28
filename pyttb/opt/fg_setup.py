@@ -20,7 +20,25 @@ fg_return = Tuple[function_type, gradient_type, float]
 
 
 class FGHandles:
+    r"""Function and gradient handles for standard CP Decompositions.
+
+    Considers the problem
+    :math:`F(model) = \frac{\\|model-data\\|^2}{\\|data\\|^2}`,
+    with specializations to scale the denominator and precompute
+    the norm squared of the data.
+    """
+
     def __init__(self, scale: float, Xnormsqr: float):
+        """Prepare function and gradient handles.
+
+        Parameters
+        ----------
+        scale:
+            Scale the denominator of the optimization problem.
+            F(M) = ||model-data||^2 / scale.
+        Xnormsqr:
+            Norm squared of the data. ||data||^2
+        """
         self._scale = scale
         self._Xnormsqr = Xnormsqr
         self._global_iter: int = 0
@@ -57,7 +75,8 @@ class FGHandles:
 
     def gradient_handle(
         self, model: ttb.ktensor, data: Union[ttb.tensor, ttb.sptensor]
-    ):
+    ) -> list[np.ndarray]:
+        """Calculate gradient of CP Decomposition for provided data and model."""
         U, _, Gamma = self._core(model, data)
         # Calculate gradient
         G = []
@@ -78,7 +97,8 @@ class FGHandles:
 
     def function_handle(
         self, model: ttb.ktensor, data: Union[ttb.tensor, ttb.sptensor]
-    ):
+    ) -> float:
+        """Evaluate function for CP Decomposition for provided data and model."""
         U, W, _ = self._core(model, data)
         V = model.factor_matrices[0] * U
         F2 = np.sum(V)
@@ -98,7 +118,7 @@ def setup(
     scale: float,
     Xnormsqr: float,
 ) -> fg_return:
-    """Collects the function and gradient handles for GCP
+    """Collect the function and gradient handles for CP Opt.
 
     Parameters
     ----------
