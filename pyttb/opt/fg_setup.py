@@ -13,9 +13,12 @@ from itertools import chain
 import numpy as np
 
 import pyttb as ttb
+from pyttb.ktensor import ktensor
+from pyttb.sptensor import sptensor
+from pyttb.tensor import tensor
 
-function_type = Callable[[ttb.ktensor, ttb.tensor | ttb.sptensor], float]
-gradient_type = Callable[[ttb.ktensor, ttb.tensor | ttb.sptensor], list[np.ndarray]]
+function_type = Callable[[ktensor, tensor | sptensor], float]
+gradient_type = Callable[[ktensor, tensor | sptensor], list[np.ndarray]]
 fg_return = tuple[function_type, gradient_type, float]
 
 
