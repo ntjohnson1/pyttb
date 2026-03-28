@@ -8,7 +8,7 @@ import numpy as np
 
 import pyttb as ttb
 from pyttb.cp_opt import _get_initial_guess, cp_opt
-from pyttb.opt.fg_setup import FGHandles
+from pyttb.opt.fg_setup import FGHandlesOPT
 from pyttb.opt.optimizers import LBFGSB
 
 
@@ -39,7 +39,7 @@ def test_fg_setup_smoke():
 
     M0 = _get_initial_guess(data, rank, "random")
     scale = M0.full().norm() ** 2
-    fgh = FGHandles(scale, scale)
+    fgh = FGHandlesOPT(scale, scale)
     f = fgh.function_handle(M0, M0.full())
     g = fgh.gradient_handle(M0, M0.full())
     assert np.abs(f) < 5 * np.finfo(f.dtype).eps
