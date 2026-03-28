@@ -22,7 +22,23 @@ if TYPE_CHECKING:
 def evaluate(
     model, data, function_handle, gradient_handle
 ) -> tuple[float, list[np.ndarray]]:
-    """Evaluate an objective function and/or gradient function."""
+    """Evaluate an objective function and/or gradient function.
+
+    Parameters
+    ----------
+    model:
+        Current decomposition.
+    data:
+        Source tensor to decompose.
+    function_handle:
+        Objective function.
+    gradient_handle:
+        Gradient definition.
+
+    Returns
+    -------
+    Objective function value and/or gradient function value with respect to model.
+    """
     F = function_handle(model, data)
     G = gradient_handle(model, data)
     return F, G
@@ -73,9 +89,11 @@ class LBFGSB(LBFGSB_Base):
             gradient_handle,
         )
 
-        x0 = model.tovec(False)
         model, lbfgsb_info = self._run_solver(
-            x0, model, lbfgsb_func_grad, lower_bound, data.shape
+            model,
+            data,
+            lbfgsb_func_grad,
+            lower_bound,
         )
 
         # TODO big print output

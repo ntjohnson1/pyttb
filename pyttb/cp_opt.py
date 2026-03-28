@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pyttb.opt.optimizers import LBFGSB
 
 
-def cp_opt(  # noqa:  PLR0913
+def cp_opt(  # noqa: PLR0913
     data: ttb.tensor | ttb.sptensor,
     rank: int,
     optimizer: LBFGSB,
@@ -27,14 +27,14 @@ def cp_opt(  # noqa:  PLR0913
     | Literal["nvecs"]
     | ttb.ktensor
     | list[np.ndarray] = "random_normal",
-    state: None = None,  # noqa: ARG001
+    state=None,  # noqa: ARG001
     scale: float | None = None,
     Xnormsqr: float | None = None,
     printitn: int = 1,
 ) -> tuple[ttb.ktensor, ttb.ktensor, dict]:
     """Fits a CP decomposition with user-specified optimizer.
 
-    The objective being optimized is F(M) = || X - M ||^2 / || X ||^2
+    The objective being optimized is F(M) = || X - M ||^2 / || X ||^2.
 
     Parameters
     ----------

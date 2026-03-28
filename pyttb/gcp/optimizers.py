@@ -472,29 +472,17 @@ class LBFGSB_Base:
     def _run_solver(  # noqa: PLR0913
         self,
         initial_model: ttb.ktensor,
-        data: ttb.tensor,
-        function_handle: function_type,
-        gradient_handle: function_type,
+        data: ttb.tensor | ttb.sptensor,
+        lbfgsb_func_grad: Callable[[np.ndarray], tuple[float, np.ndarray]],
         lower_bound: float = -np.inf,
-        mask: np.ndarray | None = None,
     ) -> tuple[ttb.ktensor, dict]:
         """Solves the defined optimization problem."""
         model = initial_model.copy()
 
-        def lbfgsb_func_grad(vector: np.ndarray):
-            model.update(np.arange(initial_model.ndims), vector)
-            func_val, grads = evaluate(
-                model,
-                data,
-                mask,
-                function_handle,
-                gradient_handle,
-            )
-            return func_val, ttb.ktensor(grads, copy=False).tovec(False)
-
         x0 = model.tovec(False)
         if "pgtol" not in self._solver_kwargs:
-            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(model.shape)
+            # TODO is this all we need data for?
+            self._solver_kwargs["pgtol"] = 1e-4 * np.prod(data.shape)
 
         # Set callback function that returns time trace by default
         monitor = LBFGSB.Monitor(
@@ -568,13 +556,18 @@ class LBFGSB(LBFGSB_Base):
             mask,
         )
 
-        x0 = model.tovec(False)
         model, lbfgsb_info = self._run_solver(
-            x0, model, lbfgsb_func_grad, lower_bound, data.shape
+            model,
+            data,
+            lbfgsb_func_grad,
+            lower_bound,
         )
 
         # TODO big print output
         return model, lbfgsb_info
+
+class Monitor(dict):
+    """Monitor LBFGSB Timings."""
 
     def __init__(
         self,
@@ -600,7 +593,7 @@ class LBFGSB(LBFGSB_Base):
 
     @property
     def __dict__(self):
-        """Monitor Entries."""
+        """Monitor entries."""
         if not self._callback:
             return {"time_trace": self.time_trace}
         else:
