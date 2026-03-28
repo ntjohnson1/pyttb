@@ -148,7 +148,9 @@ class FGHandlesOPT(FGHandles_Base):
 
         return F
 
+
 class FGHandlesWOPT(FGHandles_Base):
+    """Function and gradient handles for CP WOPT."""
 
     def __init__(self, indicator: ttb.tensor, normZsqr):
         self.W = indicator

@@ -412,7 +412,7 @@ class Adagrad(StochasticSolver):
 
 # If we use more scipy optimizers in the future we should generalize this
 class LBFGSB_Base:
-    """Base functionality of LBFGSB Solver
+    """Base functionality of LBFGSB Solver.
 
     Doesn't enforce the solve method since it can have different signatures downstream
     """
