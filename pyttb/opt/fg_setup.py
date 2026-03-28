@@ -1,22 +1,20 @@
-"""Prepare Function and Gradient Handles for CP OPT"""
+"""Prepare Function and Gradient Handles for CP OPT."""
 
 # Copyright 2024 National Technology & Engineering Solutions of Sandia,
 # LLC (NTESS). Under the terms of Contract DE-NA0003525 with NTESS, the
 # U.S. Government retains certain rights in this software.
 from __future__ import annotations
 
+from collections.abc import Callable
 from itertools import chain
-from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
 import pyttb as ttb
 
-function_type = Callable[[ttb.ktensor, Union[ttb.tensor, ttb.sptensor]], float]
-gradient_type = Callable[
-    [ttb.ktensor, Union[ttb.tensor, ttb.sptensor]], List[np.ndarray]
-]
-fg_return = Tuple[function_type, gradient_type, float]
+function_type = Callable[[ttb.ktensor, ttb.tensor | ttb.sptensor], float]
+gradient_type = Callable[[ttb.ktensor, ttb.tensor | ttb.sptensor], list[np.ndarray]]
+fg_return = tuple[function_type, gradient_type, float]
 
 
 class FGHandles:
@@ -43,11 +41,11 @@ class FGHandles:
         self._Xnormsqr = Xnormsqr
         self._global_iter: int = 0
         self._local_iter: int = 0
-        self._cache: Optional[Tuple[np.ndarray, np.ndarray, List[np.ndarray]]] = None
+        self._cache: tuple[np.ndarray, np.ndarray, list[np.ndarray]] | None = None
 
     def _core(
-        self, model: ttb.ktensor, data: Union[ttb.tensor, ttb.sptensor]
-    ) -> Tuple[np.ndarray, np.ndarray, List[np.ndarray]]:
+        self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor
+    ) -> tuple[np.ndarray, np.ndarray, list[np.ndarray]]:
         if self._local_iter == 1:
             self._local_iter = 0
             self._global_iter += 1
@@ -65,7 +63,7 @@ class FGHandles:
         Gamma = []
         for k in range(data.ndims):
             Gamma.append(np.ones((model.ncomponents, model.ncomponents)))
-            for ell in chain(range(0, k), range(k + 1, data.ndims)):
+            for ell in chain(range(k), range(k + 1, data.ndims)):
                 Gamma[-1] *= Upsilon[ell]
         W = Gamma[0] * Upsilon[0]
 
@@ -73,10 +71,16 @@ class FGHandles:
         self._cache = (U, W, Gamma)
         return U, W, Gamma
 
-    def gradient_handle(
-        self, model: ttb.ktensor, data: Union[ttb.tensor, ttb.sptensor]
-    ) -> list[np.ndarray]:
-        """Calculate gradient of CP Decomposition for provided data and model."""
+    def gradient_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the gradient value.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Source tensor to decompose.
+        """
         U, _, Gamma = self._core(model, data)
         # Calculate gradient
         G = []
@@ -95,10 +99,16 @@ class FGHandles:
         # G = [factor.flatten() for factor in G]
         return G
 
-    def function_handle(
-        self, model: ttb.ktensor, data: Union[ttb.tensor, ttb.sptensor]
-    ) -> float:
-        """Evaluate function for CP Decomposition for provided data and model."""
+    def function_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the function value.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Source tensor to decompose.
+        """
         U, W, _ = self._core(model, data)
         V = model.factor_matrices[0] * U
         F2 = np.sum(V)
