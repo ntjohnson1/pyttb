@@ -394,3 +394,25 @@ class TestCPWOPT:
 
         for k, fm in enumerate(result.factor_matrices):
             assert np.all(fm >= -1e-8), f"factor_matrix[{k}] has negative values"
+
+    def test_cp_wopt_state_int_reproducible(self):
+        """cp_wopt with the same integer seed should produce the same initial guess."""
+        shape = (4, 3, 2)
+        rank = 2
+        data = ttb.tenones(shape)
+        W = ttb.tenones(shape)
+        optimizer = LBFGSB()
+        _, M0_a, _ = cp_wopt(data, W, rank, optimizer, state=17)
+        _, M0_b, _ = cp_wopt(data, W, rank, optimizer, state=17)
+        assert M0_a.isequal(M0_b)
+
+    def test_cp_wopt_state_generator_reproducible(self):
+        """cp_wopt with identically seeded Generators should produce the same M0."""
+        shape = (4, 3, 2)
+        rank = 2
+        data = ttb.tenones(shape)
+        W = ttb.tenones(shape)
+        optimizer = LBFGSB()
+        _, M0_a, _ = cp_wopt(data, W, rank, optimizer, state=np.random.default_rng(3))
+        _, M0_b, _ = cp_wopt(data, W, rank, optimizer, state=np.random.default_rng(3))
+        assert M0_a.isequal(M0_b)

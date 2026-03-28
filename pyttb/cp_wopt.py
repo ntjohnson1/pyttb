@@ -11,10 +11,12 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 
 import pyttb as ttb
-from pyttb.cp_opt import _get_initial_guess
+from pyttb.cp_opt import get_initial_guess
 from pyttb.opt.fg_setup import setup_wopt
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from pyttb.opt.optimizers import LBFGSB
 
 
@@ -27,7 +29,8 @@ def cp_wopt(  # noqa: PLR0913
     | Literal["random_normal"]
     | Literal["nvecs"]
     | ttb.ktensor
-    | list[np.ndarray] = "random_normal",
+    | Sequence[np.ndarray] = "random_normal",
+    state: np.random.Generator | int | None = None,
     lower_bound: float = -np.inf,
     skip_zeroing: bool = False,
     printitn: int = 1,
@@ -50,6 +53,9 @@ def cp_wopt(  # noqa: PLR0913
         Optimizer class for solving the decomposition problem.
     init:
         Initial solution to the problem.
+    state:
+        Random number generator or integer seed for reproducible random
+        initialization. See :func:`cp_opt` for details.
     lower_bound:
         Lower bound on factor matrix entries (e.g., 0.0 for nonnegative).
     skip_zeroing:
@@ -82,7 +88,7 @@ def cp_wopt(  # noqa: PLR0913
         data = data.copy()
         data.data[weights.data == 0] = 0.0
 
-    M0 = _get_initial_guess(data, rank, init)
+    M0 = get_initial_guess(data, rank, init, state)
     if M0.ncomponents != rank:
         raise ValueError(
             f"Initial guess has {M0.ncomponents} components but expected {rank}"

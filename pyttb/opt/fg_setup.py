@@ -22,8 +22,7 @@ gradient_type = Callable[[ktensor, tensor | sptensor], list[np.ndarray]]
 fg_return = tuple[function_type, gradient_type, float]
 
 
-# TODO might be better as a protocol
-class FGHandles_Base(ABC):
+class FGHandlesBase(ABC):
     """Base class to support the various OPT function and gradient definitions."""
 
     @abc.abstractmethod
@@ -51,7 +50,7 @@ class FGHandles_Base(ABC):
         """
 
 
-class FGHandlesOPT(FGHandles_Base):
+class FGHandlesOPT(FGHandlesBase):
     """Function and gradient handles for CP OPT."""
 
     def __init__(self, scale: float, Xnormsqr: float):
@@ -67,7 +66,6 @@ class FGHandlesOPT(FGHandles_Base):
         """
         self._scale = scale
         self._Xnormsqr = Xnormsqr
-        self._global_iter: int = 0
         self._local_iter: int = 0
         self._cache: tuple[np.ndarray, np.ndarray, list[np.ndarray]] | None = None
 
@@ -76,7 +74,6 @@ class FGHandlesOPT(FGHandles_Base):
     ) -> tuple[np.ndarray, np.ndarray, list[np.ndarray]]:
         if self._local_iter == 1:
             self._local_iter = 0
-            self._global_iter += 1
             assert self._cache is not None
             ret_val = self._cache
             self._cache = None
@@ -117,7 +114,6 @@ class FGHandlesOPT(FGHandles_Base):
             U = data.mttkrp(model.factor_matrices, k)
             G.append(-U + model.factor_matrices[k].dot(Gamma[k]))
         G = [factor * (2 / self._scale) for factor in G]
-        # G = [factor.flatten() for factor in G]
         return G
 
     def function_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
@@ -145,7 +141,7 @@ class FGHandlesOPT(FGHandles_Base):
         return F
 
 
-class FGHandlesWOPT(FGHandles_Base):
+class FGHandlesWOPT(FGHandlesBase):
     """Function and gradient handles for CP WOPT.
 
     Optimizes F(K) = 0.5 * || W .* (Z - K) ||^2
@@ -165,7 +161,6 @@ class FGHandlesWOPT(FGHandles_Base):
         """
         self.W = indicator
         self.normZsqr = normZsqr
-        self._global_iter: int = 0
         self._local_iter: int = 0
         self._cache: np.ndarray | None = None
 
@@ -182,7 +177,6 @@ class FGHandlesWOPT(FGHandles_Base):
         """
         if self._local_iter == 1:
             self._local_iter = 0
-            self._global_iter += 1
             assert self._cache is not None
             B_data = self._cache
             self._cache = None
@@ -202,7 +196,8 @@ class FGHandlesWOPT(FGHandles_Base):
         data:
             Dense source tensor Z (missing entries should be zeroed out).
         """
-        assert isinstance(data, ttb.tensor), "CP-WOPT requires a dense tensor"
+        if not isinstance(data, ttb.tensor):
+            raise ValueError("CP-WOPT requires a dense tensor")
         B_data = self._core(model, data)
         Z_data = data.data
         # F = 0.5*||Z||^2 - <Z,B> + 0.5*||B||^2
@@ -218,7 +213,8 @@ class FGHandlesWOPT(FGHandles_Base):
         data:
             Dense source tensor Z (missing entries should be zeroed out).
         """
-        assert isinstance(data, ttb.tensor), "CP-WOPT requires a dense tensor"
+        if not isinstance(data, ttb.tensor):
+            raise ValueError("CP-WOPT requires a dense tensor")
         B_data = self._core(model, data)
         Z_data = data.data
         T = ttb.tensor(Z_data - B_data, copy=False)
@@ -228,8 +224,7 @@ class FGHandlesWOPT(FGHandles_Base):
         return G
 
 
-# TODO make this setup opt
-def setup(
+def setup_opt(
     scale: float,
     Xnormsqr: float,
 ) -> fg_return:
@@ -247,11 +242,10 @@ def setup(
     -------
         Function handle, gradient handle, and lower bound.
     """
+    # cp_opt handles operate on ktensors and (sp)tensors directly, unlike gcp
+    # handles which use flat numpy vectors. This is an intentional design choice.
     lower_bound = -np.inf
     fgh = FGHandlesOPT(scale, Xnormsqr)
-    # TODO this works if we operate on ktensors and (sp)tensors
-    #  need to update to work on vector valued quantities or specify this
-    #  is the delta from gcp opt
     return fgh.function_handle, fgh.gradient_handle, lower_bound
 
 
