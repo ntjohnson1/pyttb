@@ -5,6 +5,8 @@
 # U.S. Government retains certain rights in this software.
 from __future__ import annotations
 
+import abc
+from abc import ABC
 from collections.abc import Callable
 from itertools import chain
 
@@ -17,14 +19,37 @@ gradient_type = Callable[[ttb.ktensor, ttb.tensor | ttb.sptensor], list[np.ndarr
 fg_return = tuple[function_type, gradient_type, float]
 
 
-class FGHandles:
-    r"""Function and gradient handles for standard CP Decompositions.
+# TODO might be better as a protocol
+class FGHandles_Base(ABC):
+    """Base class to support the various OPT function and gradient definitions."""
 
-    Considers the problem
-    :math:`F(model) = \frac{\\|model-data\\|^2}{\\|data\\|^2}`,
-    with specializations to scale the denominator and precompute
-    the norm squared of the data.
-    """
+    @abc.abstractmethod
+    def gradient_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the gradient value.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Source tensor to decompose.
+        """
+
+    @abc.abstractmethod
+    def function_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the function value.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Source tensor to decompose.
+        """
+
+
+class FGHandlesOPT(FGHandles_Base):
+    """Function and gradient handles for CP OPT."""
 
     def __init__(self, scale: float, Xnormsqr: float):
         """Prepare function and gradient handles.
@@ -123,7 +148,14 @@ class FGHandles:
 
         return F
 
+class FGHandlesWOPT(FGHandles_Base):
 
+    def __init__(self, indicator: ttb.tensor, normZsqr):
+        self.W = indicator
+        self.normZsqr = normZsqr
+
+
+# TODO make this setup opt
 def setup(
     scale: float,
     Xnormsqr: float,
@@ -143,7 +175,7 @@ def setup(
         Function handle, gradient handle, and lower bound.
     """
     lower_bound = -np.inf
-    fgh = FGHandles(scale, Xnormsqr)
+    fgh = FGHandlesOPT(scale, Xnormsqr)
     # TODO this works if we operate on ktensors and (sp)tensors
     #  need to update to work on vector valued quantities or specify this
     #  is the delta from gcp opt
