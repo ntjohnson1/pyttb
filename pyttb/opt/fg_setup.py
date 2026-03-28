@@ -109,14 +109,7 @@ class FGHandlesOPT(FGHandles_Base):
         U, _, Gamma = self._core(model, data)
         # Calculate gradient
         G = []
-        # FIXME: Since we are setting up the gradient handle we
-        # can clean up this loop
-        print(
-            f"{U=}\n{model.factor_matrices[0]=}\n{Gamma[0]=}\n"
-            f"{model.factor_matrices[0].dot(Gamma[0])}"
-        )
         G.append(-U + model.factor_matrices[0].dot(Gamma[0]))
-        print(f"{G[0]=}")
         for k in range(1, data.ndims):
             U = data.mttkrp(model.factor_matrices, k)
             G.append(-U + model.factor_matrices[k].dot(Gamma[k]))
@@ -150,11 +143,86 @@ class FGHandlesOPT(FGHandles_Base):
 
 
 class FGHandlesWOPT(FGHandles_Base):
-    """Function and gradient handles for CP WOPT."""
+    """Function and gradient handles for CP WOPT.
 
-    def __init__(self, indicator: ttb.tensor, normZsqr):
+    Optimizes F(K) = 0.5 * || W .* (Z - K) ||^2
+    where W is a binary indicator tensor (0=missing, 1=observed).
+    Z is assumed to have zeros at missing (W==0) entries.
+    """
+
+    def __init__(self, indicator: ttb.tensor, normZsqr: float):
+        """Prepare function and gradient handles.
+
+        Parameters
+        ----------
+        indicator:
+            Binary weight tensor W (0=missing, 1=observed).
+        normZsqr:
+            Norm squared of the data tensor Z. ||Z||^2
+        """
         self.W = indicator
         self.normZsqr = normZsqr
+        self._global_iter: int = 0
+        self._local_iter: int = 0
+        self._cache: np.ndarray | None = None
+
+    def _core(
+        self,
+        model: ttb.ktensor,
+        data: ttb.tensor | ttb.sptensor,  # noqa: ARG002
+    ) -> np.ndarray:
+        """Compute (and cache) B = W .* full(model).
+
+        The expensive ktensor-to-dense reconstruction is cached so
+        function_handle and gradient_handle can share it within one
+        optimizer step.
+        """
+        if self._local_iter == 1:
+            self._local_iter = 0
+            self._global_iter += 1
+            assert self._cache is not None
+            B_data = self._cache
+            self._cache = None
+            return B_data
+        self._local_iter += 1
+        B_data = self.W.data * model.full().data
+        self._cache = B_data
+        return B_data
+
+    def function_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the function value F = 0.5 * ||W*(Z-M)||^2.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Dense source tensor Z (missing entries should be zeroed out).
+        """
+        assert isinstance(data, ttb.tensor), "CP-WOPT requires a dense tensor"
+        B_data = self._core(model, data)
+        Z_data = data.data
+        # F = 0.5*||Z||^2 - <Z,B> + 0.5*||B||^2
+        return 0.5 * self.normZsqr - np.sum(Z_data * B_data) + 0.5 * np.sum(B_data**2)
+
+    def gradient_handle(self, model: ttb.ktensor, data: ttb.tensor | ttb.sptensor):
+        """Calculate the gradient of F = 0.5 * ||W*(Z-M)||^2.
+
+        Parameters
+        ----------
+        model:
+            Current decomposition.
+        data:
+            Dense source tensor Z (missing entries should be zeroed out).
+        """
+        assert isinstance(data, ttb.tensor), "CP-WOPT requires a dense tensor"
+        B_data = self._core(model, data)
+        Z_data = data.data
+        T = ttb.tensor(Z_data - B_data, copy=False)
+        G = []
+        for k in range(data.ndims):
+            G.append(-T.mttkrp(model.factor_matrices, k))
+        return G
 
 
 # TODO make this setup opt
@@ -181,4 +249,26 @@ def setup(
     # TODO this works if we operate on ktensors and (sp)tensors
     #  need to update to work on vector valued quantities or specify this
     #  is the delta from gcp opt
+    return fgh.function_handle, fgh.gradient_handle, lower_bound
+
+
+def setup_wopt(
+    indicator: ttb.tensor,
+    normZsqr: float,
+) -> fg_return:
+    """Collect the function and gradient handles for CP WOPT.
+
+    Parameters
+    ----------
+    indicator:
+        Binary weight tensor W (0=missing, 1=observed).
+    normZsqr:
+        Norm squared of the data tensor Z. ||Z||^2
+
+    Returns
+    -------
+        Function handle, gradient handle, and lower bound.
+    """
+    lower_bound = -np.inf
+    fgh = FGHandlesWOPT(indicator, normZsqr)
     return fgh.function_handle, fgh.gradient_handle, lower_bound

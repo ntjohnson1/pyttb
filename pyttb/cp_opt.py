@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -60,7 +59,6 @@ def cp_opt(  # noqa: PLR0913
     -------
         Solution, Initial Guess, Dictionary of meta data
     """
-    start = time.monotonic()
     # Skip to line 93 in cp_opt.m
     M0 = _get_initial_guess(data, rank, init)
     if M0.ncomponents != rank:
@@ -74,12 +72,7 @@ def cp_opt(  # noqa: PLR0913
         if Xnormsqr > 0.0:
             scale = Xnormsqr
 
-    setup_time = time.monotonic() - start
-    if False:
-        print(setup_time)
-
     # Optimization stage
-    start = time.monotonic()
     if printitn > 0:
         logging.info("\nCP-OPT Direct Optimization")
     function_handle, gradient_handle, lower_bound = setup(scale, Xnormsqr)
@@ -90,6 +83,8 @@ def cp_opt(  # noqa: PLR0913
         gradient_handle,
         lower_bound,
     )
+    result.arrange()
+    result = result.fixsigns()
     return result, M0, info
 
 

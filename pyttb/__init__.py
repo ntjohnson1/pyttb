@@ -28,6 +28,11 @@ from pyttb.tensor import tendiag, teneye, tenones, tenrand, tensor, tenzeros
 from pyttb.ttensor import ttensor
 from pyttb.tucker_als import tucker_als
 
+# These must come after the tensor types are fully defined to avoid circular
+# imports (opt/fg_setup.py references ttb.ktensor at module level).
+from pyttb.cp_opt import cp_opt
+from pyttb.cp_wopt import cp_wopt
+
 
 def ignore_warnings(ignore=True):
     """Disable warnings."""
@@ -41,6 +46,8 @@ def ignore_warnings(ignore=True):
 __all__ = [  # noqa: PLE0604
     cp_als.__name__,
     cp_apr.__name__,
+    cp_opt.__name__,
+    cp_wopt.__name__,
     export_data.__name__,
     gcp_opt.__name__,
     hosvd.__name__,
