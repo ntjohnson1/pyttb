@@ -136,6 +136,7 @@ def test_cp_als_tensor_dimorder(capsys, sample_tensor):
     (data, T) = sample_tensor
 
     # default dimorder
+    np.random.seed(1)
     dimorder = [i for i in range(T.ndims)]
     (M, Minit, output) = ttb.cp_als(T, 2, dimorder=dimorder)
     capsys.readouterr()
